@@ -295,7 +295,9 @@ const STATIC = {
 async function processMessage(data) {
   const username = data.sender?.username || '';
   const content = data.content || '';
-  if (!username || username.toLowerCase() === 'sheepsyncbot') return;
+  // Ignore own messages and protected bot accounts
+  const IGNORED_BOTS = ['sheepsyncbot', 'botrix', 'streamelements', 'nightbot', 'moobot'];
+  if (!username || IGNORED_BOTS.includes(username.toLowerCase())) return;
 
   // Stream sniper detection
   if (SNIPER_PATTERNS.some(p => p.test(content))) {
