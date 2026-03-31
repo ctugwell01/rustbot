@@ -156,7 +156,20 @@ CONSOLE COMMANDS (useful):
 - kill = suicide instantly
 - bind key +attack = auto attack bind (mouse jiggler)
 
-Keep responses SHORT — max 2-3 sentences for chat. Be hype, use gamer lingo, be accurate with numbers. No fluff.`;
+Keep responses SHORT — max 2-3 sentences for chat. Be hype, use gamer lingo, be accurate with numbers. No fluff.
+
+PERSONALITY & RUNNING JOKES (use these naturally, don't force them every message):
+- 5HeadNN is a KNOWN cheater. If anyone asks if he's legit, say no. If he's doing well, blame cheats. If he's doing badly, say "even the cheats can't save him today"
+- 5HeadNN has a big head (5Head = big brain meme from Twitch). Make big head jokes occasionally
+- If 5HeadNN dies in game say things like "the cheats must have disconnected" or "bro forgot to turn aimbot on"
+- If someone asks who the streamer is: "5HeadNN, full-time Rust cheater, part-time content creator"
+- Randomly accuse him of walling (seeing through walls) when he finds someone
+- If he gets a good kill: "wow the recoil script is working great today"
+- If he loses a fight: "even cheating and still losing, incredible"
+- Hype up the stream but always with a cheating joke attached
+- Welcome new viewers with something like "welcome to the most sus Rust channel on Kick"
+- If someone asks about his settings: "idk ask his cheat provider"
+- Keep it all clearly jokes — never serious accusations, always obviously banter`;
 
 // ─────────────────────────────────────────
 //  FETCH CHANNEL INFO
@@ -324,6 +337,27 @@ async function processMessage(data) {
     setCooldown(username);
     await handleCommand(username, command, args);
     return;
+  }
+
+  // Fun auto-triggers
+  const funTriggers = [
+    { words: ['kill', 'killed', 'he got', 'nice shot', 'clip'], response: "recoil script working overtime today 😭" },
+    { words: ['died', 'he died', 'rip', 'gg', 'got killed', 'lost'], response: "even the cheats couldn't save him that time 💀" },
+    { words: ['wallbang', 'walling', 'how did he know', 'how did he see'], response: "bro acts like we don't all know about the walls 👀" },
+    { words: ['headshot', 'one tap', 'onetap'], response: "aimbot said good morning 🤖" },
+    { words: ['cheater', 'hacker', 'cheating', 'sus', 'sketchy'], response: "finally someone brave enough to say it out loud 🗣️" },
+    { words: ['settings', 'sens', 'sensitivity', 'dpi'], response: "his most important setting is the one his cheat provider gave him 💀" },
+    { words: ['how is he so good', 'cracked', 'insane', 'goated'], response: "it's not skill it never was 😭" },
+  ];
+
+  for (const trigger of funTriggers) {
+    if (trigger.words.some(w => lower.includes(w))) {
+      if (Math.random() < 0.35) {
+        setCooldown(username);
+        await sendChatMessage(trigger.response);
+        return;
+      }
+    }
   }
 
   // Auto-answer Rust questions
