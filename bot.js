@@ -28,8 +28,9 @@ const CONFIG = {
 //  KICK PUSHER CONFIG (public Kick values)
 // ─────────────────────────────────────────
 const KICK_PUSHER = {
-  appKey: 'eb1d5f283081a78b932c',
+  appKey: '32cbd69e4b950bf97679',
   cluster: 'us2',
+  wsHost: 'ws-us2.pusher.com',
 };
 
 // ─────────────────────────────────────────
@@ -381,8 +382,10 @@ async function onStreamerLive() {
 // ─────────────────────────────────────────
 function connectToKick(channelData) {
   const pusher = new Pusher(KICK_PUSHER.appKey, {
+    wsHost: KICK_PUSHER.wsHost,
     cluster: KICK_PUSHER.cluster,
     forceTLS: true,
+    disableStats: true,
   });
 
   // Subscribe to chatroom
