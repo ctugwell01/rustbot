@@ -324,7 +324,18 @@ async function processMessage(data) {
     return;
   }
 
+  // Direct @ mention — always respond regardless of cooldown
+  const isMention = lower.includes('@sheepsyncbot') || lower.includes('@sheepsync');
   const isCmd = content.startsWith(CONFIG.commandPrefix);
+
+  if (isMention) {
+    const question = content.replace(/@sheepsyncbot/gi, '').replace(/@sheepsync/gi, '').trim();
+    const r = await askClaude(`${userStatus} viewer ${username} is directly asking SheepSync: "${question}". Reply directly to them.`);
+    if (r) await sendChatMessage(r, username);
+    setCD(username);
+    return;
+  }
+
   if (!isCmd && isCD(username)) return;
 
   if (isCmd) {
