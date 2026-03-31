@@ -28,10 +28,10 @@ const CONFIG = {
 const KICK_OAUTH = {
   clientId: process.env.KICK_CLIENT_ID,
   clientSecret: process.env.KICK_CLIENT_SECRET,
-  redirectUri: process.env.KICK_REDIRECT_URI || 'https://sheepsync.up.railway.app/callback',
-  authUrl: 'https://kick.com/oauth2/authorize',
-  tokenUrl: 'https://kick.com/oauth2/token',
-  scopes: 'user:read+channel:read+chat:write+events:subscribe',
+  redirectUri: process.env.KICK_REDIRECT_URI || 'https://rustbot-production.up.railway.app/callback',
+  authUrl: 'https://id.kick.com/oauth/authorize',
+  tokenUrl: 'https://id.kick.com/oauth/token',
+  scopes: ['user:read', 'channel:read', 'chat:write', 'events:subscribe'],
 };
 
 const KICK_PUSHER = {
@@ -111,7 +111,7 @@ app.get('/', (req, res) => {
       </body></html>
     `);
   } else {
-    const authUrl = `${KICK_OAUTH.authUrl}?client_id=${KICK_OAUTH.clientId}&redirect_uri=${encodeURIComponent(KICK_OAUTH.redirectUri)}&response_type=code&scope=${KICK_OAUTH.scopes}`;
+    const authUrl = `${KICK_OAUTH.authUrl}?client_id=${KICK_OAUTH.clientId}&redirect_uri=${encodeURIComponent(KICK_OAUTH.redirectUri)}&response_type=code&scope=${KICK_OAUTH.scopes.join('+')}`;
     res.send(`
       <html><body style="background:#0a0a0a;color:#e0d5c8;font-family:monospace;padding:40px;text-align:center">
         <h1 style="color:#c8622a">🐑 SheepSync Setup</h1>
