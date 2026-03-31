@@ -164,7 +164,13 @@ Keep responses SHORT — max 2-3 sentences for chat. Be hype, use gamer lingo, b
 async function fetchChannelInfo() {
   try {
     const res = await axios.get(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
-      headers: { 'Accept': 'application/json' },
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${process.env.KICK_AUTH_TOKEN}`,
+        'X-XSRF-TOKEN': process.env.KICK_XSRF_TOKEN || '',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Referer': 'https://kick.com',
+      },
     });
     chatroomId = res.data.chatroom?.id;
     console.log(`✅ Connected to channel: ${CONFIG.channelSlug} (Chatroom ID: ${chatroomId})`);
