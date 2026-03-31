@@ -13,7 +13,7 @@ const fs = require('fs');
 const CONFIG = {
   channelSlug: '5headnn',
   streamerName: '5HeadNN',
-  botPrefix: "[SheepSync]",
+  botPrefix: '',
   commandPrefix: '!',
   cooldownSeconds: 5,
   chatroomId: 5351258,
@@ -108,7 +108,7 @@ async function sendChatMessage(message, replyTo = null) {
   const token = await getToken();
   if (!token) { console.log('⚠️ Not authorized yet — visit the Railway URL'); return; }
 
-  const full = replyTo ? `${CONFIG.botPrefix} @${replyTo} ${message}` : `${CONFIG.botPrefix} ${message}`;
+  const full = replyTo ? `@${replyTo} ${message}` : message;
   const cleaned = full.replace(/[→®©]/g, "").trim();
   const trimmed = cleaned.length > 498 ? cleaned.substring(0, 495) + "..." : cleaned;
 
