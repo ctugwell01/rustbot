@@ -175,24 +175,10 @@ PERSONALITY & RUNNING JOKES (use these naturally, don't force them every message
 //  FETCH CHANNEL INFO
 // ─────────────────────────────────────────
 async function fetchChannelInfo() {
-  try {
-    const res = await axios.get(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${process.env.KICK_AUTH_TOKEN}`,
-        'X-XSRF-TOKEN': process.env.KICK_XSRF_TOKEN || '',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Referer': 'https://kick.com',
-      },
-    });
-    chatroomId = res.data.chatroom?.id;
-    console.log(`✅ Connected to channel: ${CONFIG.channelSlug} (Chatroom ID: ${chatroomId})`);
-    return res.data;
-  } catch (err) {
-    console.error('❌ Failed to fetch channel info:', err.message);
-    console.error('Make sure the channel slug is correct and Kick API is accessible.');
-    process.exit(1);
-  }
+  // Hardcoded chatroom ID for 5headnn — bypasses Kick API entirely
+  chatroomId = 5351258;
+  console.log(`✅ Channel: ${CONFIG.channelSlug} | Chatroom ID: ${chatroomId}`);
+  return { id: chatroomId };
 }
 
 // ─────────────────────────────────────────
