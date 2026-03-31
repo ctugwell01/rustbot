@@ -16,7 +16,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const CONFIG = {
   channelSlug: '5headnn',           // Your Kick channel
   streamerName: '5HeadNN',          // Display name for welcome message
-  botPrefix: '🤖 RustBot →',        // Prefix on every bot message
+  botPrefix: '🐑 SheepSync →',        // Prefix on every bot message
   commandPrefix: '!',               // Command trigger character
   welcomeEnabled: true,             // Welcome when you go live
   autoAnswerQuestions: true,        // Auto-answer Rust questions
@@ -56,7 +56,7 @@ const authHeaders = {
 // ─────────────────────────────────────────
 //  RUST SYSTEM PROMPT
 // ─────────────────────────────────────────
-const RUST_SYSTEM_PROMPT = `You are RustBot, the ultimate Rust game expert for ${CONFIG.streamerName}'s Kick stream.
+const RUST_SYSTEM_PROMPT = `You are SheepSync, the ultimate Rust game expert for ${CONFIG.streamerName}'s Kick stream.
 
 You have COMPLETE expert knowledge of Rust (by Facepunch Studios):
 
@@ -384,7 +384,7 @@ async function onStreamerLive() {
   console.log('🟢 Streamer went live! Sending welcome message...');
   
   const welcome = await askClaude(
-    `${CONFIG.streamerName} just went live on Kick playing Rust. Write a HYPE welcome message for chat. Introduce yourself as RustBot, say you know everything about Rust and viewers can ask anything using !commands. Max 2 sentences, high energy.`
+    `${CONFIG.streamerName} just went live on Kick playing Rust. Write a HYPE welcome message for chat. Introduce yourself as SheepSync, say you know everything about Rust and viewers can ask anything using !commands. Keep it to 2 sentences, high energy.`
   );
   
   if (welcome) await sendChatMessage(welcome);
@@ -426,7 +426,7 @@ function connectToKick(channelData) {
   });
 
   console.log(`📡 Listening on chatroom ${chatroomId}...`);
-  console.log(`🎮 RustBot is active for channel: ${CONFIG.channelSlug}`);
+  console.log(`🐑 SheepSync is active for channel: ${CONFIG.channelSlug}`);
   console.log(`💡 Commands: !raid, !bp, !meta, !loot, !wipe, !farm, !base, !discord, !lurk`);
 }
 
@@ -435,12 +435,12 @@ function connectToKick(channelData) {
 // ─────────────────────────────────────────
 async function main() {
   console.log('');
-  console.log('██████╗ ██╗   ██╗███████╗████████╗██████╗  ██████╗ ████████╗');
-  console.log('██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗╚══██╔══╝');
-  console.log('██████╔╝██║   ██║███████╗   ██║   ██████╔╝██║   ██║   ██║   ');
-  console.log('██╔══██╗██║   ██║╚════██║   ██║   ██╔══██╗██║   ██║   ██║   ');
-  console.log('██║  ██║╚██████╔╝███████║   ██║   ██████╔╝╚██████╔╝   ██║   ');
-  console.log('╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   ╚═════╝  ╚═════╝    ╚═╝   ');
+  console.log(' ██████╗██╗  ██╗███████╗███████╗██████╗ ███████╗██╗   ██╗███╗   ██╗ ██████╗');
+  console.log('██╔════╝██║  ██║██╔════╝██╔════╝██╔══██╗██╔════╝╚██╗ ██╔╝████╗  ██║██╔════╝');
+  console.log('╚█████╗ ███████║█████╗  █████╗  ██████╔╝███████╗ ╚████╔╝ ██╔██╗ ██║██║     ');
+  console.log(' ╚═══██╗██╔══██║██╔══╝  ██╔══╝  ██╔═══╝ ╚════██║  ╚██╔╝  ██║╚██╗██║██║     ');
+  console.log('██████╔╝██║  ██║███████╗███████╗██║      ███████║   ██║   ██║ ╚████║╚██████╗');
+  console.log('╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝      ╚══════╝   ╚═╝   ╚═╝  ╚═══╝ ╚═════╝');
   console.log(`                     for kick.com/${CONFIG.channelSlug}`);
   console.log('');
 
