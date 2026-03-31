@@ -13,7 +13,7 @@ const fs = require('fs');
 const CONFIG = {
   channelSlug: '5headnn',
   streamerName: '5HeadNN',
-  botPrefix: '[SheepSync]',
+  botPrefix: "[SheepSync]",
   commandPrefix: '!',
   cooldownSeconds: 5,
   chatroomId: 5351258,
@@ -109,7 +109,8 @@ async function sendChatMessage(message) {
   if (!token) { console.log('⚠️ Not authorized yet — visit the Railway URL'); return; }
 
   const full = `${CONFIG.botPrefix} ${message}`;
-  const trimmed = full.length > 498 ? full.substring(0, 495) + '...' : full;
+  const cleaned = full.replace(/[→®©]/g, "").trim();
+  const trimmed = cleaned.length > 498 ? cleaned.substring(0, 495) + "..." : cleaned;
 
   try {
     const res = await fetch(`https://api.kick.com/public/v1/chat`, {
