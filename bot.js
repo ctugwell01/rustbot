@@ -104,11 +104,11 @@ setInterval(refreshTokens, 30 * 60 * 1000);
 // ─────────────────────────────────────────
 //  SEND MESSAGE
 // ─────────────────────────────────────────
-async function sendChatMessage(message) {
+async function sendChatMessage(message, replyTo = null) {
   const token = await getToken();
   if (!token) { console.log('⚠️ Not authorized yet — visit the Railway URL'); return; }
 
-  const full = `${CONFIG.botPrefix} ${message}`;
+  const full = replyTo ? `${CONFIG.botPrefix} @${replyTo} ${message}` : `${CONFIG.botPrefix} ${message}`;
   const cleaned = full.replace(/[→®©]/g, "").trim();
   const trimmed = cleaned.length > 498 ? cleaned.substring(0, 495) + "..." : cleaned;
 
@@ -280,7 +280,7 @@ async function processMessage(data) {
   // Stream sniper detection
   if (SNIPER_PATTERNS.some(p => p.test(content))) {
     const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
-    await sendChatMessage(`@${username} ${roast}`);
+    await sendChatMessage(roast, username);
     console.log(`🎯 Sniper detected: ${username}`);
     return;
   }
@@ -288,7 +288,7 @@ async function processMessage(data) {
   // Spam / bot check — ban and roast immediately
   if (isSpam(content)) {
     const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
-    await sendChatMessage(`@${username} ${roast}`);
+    await sendChatMessage(roast, username);
     await banUser(username);
     console.log(`🚫 Spam detected from ${username}: ${content}`);
     return;
@@ -306,7 +306,7 @@ async function processMessage(data) {
   if (!greeted.has(username.toLowerCase())) {
     greeted.add(username.toLowerCase());
     const g = await askClaude(`New viewer "${username}" ${userStatus} just said: "${content}". Short Rust welcome — treat them based on their status: ${userStatus}.`);
-    if (g) await sendChatMessage(g);
+    if (g) await sendChatMessage(g, username);
     return;
   }
 
@@ -316,10 +316,10 @@ async function processMessage(data) {
   if (isCmd) {
     const [cmd, ...rest] = content.trim().split(' ');
     const args = rest.join(' ');
-    if (STATIC[cmd.toLowerCase()]) { await sendChatMessage(STATIC[cmd.toLowerCase()]); return; }
+    if (STATIC[cmd.toLowerCase()]) { await sendChatMessage(STATIC[cmd.toLowerCase()], username); return; }
     setCD(username);
     const r = await askClaude(`${userStatus} viewer ${username} asked: ${args ? `${cmd} ${args}` : cmd}`);
-    if (r) await sendChatMessage(r);
+    if (r) await sendChatMessage(r, username);
     return;
   }
 
@@ -334,14 +334,14 @@ async function processMessage(data) {
 
   for (const t of triggers) {
     if (t.words.some(w => lower.includes(w)) && Math.random() < 0.35) {
-      setCD(username); await sendChatMessage(t.r); return;
+      setCD(username); await sendChatMessage(t.r, username); return;
     }
   }
 
   const isQ = lower.includes('?') ||
     lower.match(/\b(how|what|where|when|why|can|does|do|is|are|will|should|best|which)\b/) ||
     lower.match(/\b(raid|bp|blueprint|craft|farm|base|wipe|loot|weapon|gun|meta|rocket|c4|sulfur|scrap)\b/);
-  if (isQ) { setCD(username); const r = await askClaude(`${userStatus} viewer ${username} says: ${content}`); if (r) await sendChatMessage(r); }
+  if (isQ) { setCD(username); const r = await askClaude(`${userStatus} viewer ${username} says: ${content}`); if (r) await sendChatMessage(r, username); }
 }
 
 // ─────────────────────────────────────────
