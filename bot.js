@@ -116,7 +116,7 @@ async function sendChatMessage(message, replyTo = null) {
     const res = await fetch(`https://api.kick.com/public/v1/chat`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), content: trimmed, type: 'user' }),
+      body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), content: trimmed, type: 'bot' }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -178,9 +178,23 @@ function isSpam(text) {
   return SPAM_PATTERNS.some(p => p.test(text));
 }
 
-async function banUser(username) {
+async function deleteMessage(messageId) {
+  const token = await getToken();
+  if (!token || !messageId) return;
+  try {
+    await fetch(`https://api.kick.com/public/v1/chat/${messageId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    console.log(`🗑️ Deleted message: ${messageId}`);
+  } catch(e) { console.error('Delete error:', e.message); }
+}
+
+async function banUser(username, messageId = null) {
   const token = await getToken();
   if (!token) return;
+  // Delete their message first
+  if (messageId) await deleteMessage(messageId);
   try {
     const res = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
       method: 'POST',
@@ -289,7 +303,7 @@ async function processMessage(data) {
   if (isSpam(content)) {
     const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
     await sendChatMessage(roast, username);
-    await banUser(username);
+    await banUser(username, data.id || null);
     console.log(`🚫 Spam detected from ${username}: ${content}`);
     return;
   }
