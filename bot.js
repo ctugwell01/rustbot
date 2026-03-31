@@ -428,7 +428,7 @@ function connectToKick() {
   const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
   liveChannel.bind('App\\Events\\StreamerIsLive', async () => {
     console.log('🟢 5HeadNN went live!');
-    const welcome = await askClaude('5HeadNN just went live on Kick playing Rust. Give him a big Welsh Valleys style welcome — hype up the stream, call him the best stand sprayer in EU, welcome everyone to the most sus Rust channel on Kick, mention they can use commands like !raid !meta !bp. Keep it short, punchy and full of Welsh Valleys degen energy.');
+    const welcome = await askClaude('5HeadNN just went live on Kick playing Rust. Welcome him in a casual Welsh Valleys style — low key, not too hype, maybe a light dig at him too. Short and natural like a mate welcoming another mate. Mention the cheating banter, stand spraying, and tell chat they can use !commands. Max 2 sentences, keep it real not cringe.');
     if (welcome) await sendChatMessage(welcome);
   });
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
