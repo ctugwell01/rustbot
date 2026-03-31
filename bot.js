@@ -196,14 +196,20 @@ async function banUser(username, messageId = null) {
   // Delete their message first
   if (messageId) await deleteMessage(messageId);
   try {
+    // Try official moderation endpoint first
     const res = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ banned_username: username, permanent: true }),
+      body: JSON.stringify({ banned_user: username, permanent: true, reason: 'Spam detected by SheepSync' }),
     });
     const data = await res.json();
-    if (res.ok) console.log(`🔨 Banned: ${username}`);
-    else console.error('Ban failed:', data);
+    if (res.ok) {
+      console.log(`🔨 Banned: ${username}`);
+    } else {
+      console.error('Ban failed:', data);
+      // Fallback: send /ban command via chat
+      await sendChatMessage(`/ban ${username} spam bot`);
+    }
   } catch(e) { console.error('Ban error:', e.message); }
 }
 
