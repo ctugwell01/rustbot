@@ -338,7 +338,7 @@ async function processMessage(data) {
 
   if (isMention) {
     const question = content.replace(/@sheepsyncbot/gi, '').replace(/@sheepsync/gi, '').trim();
-    const r = await askClaude(`${userStatus} viewer ${username} is directly asking SheepSync: "${question}". Reply directly to them.`);
+    const r = await askClaude(`${userStatus} viewer ${username} is talking to you (SheepSync the chatbot) directly and says: "${question}". You are a chatbot in the stream chat, not a player. Answer naturally as a chatbot would. If they are asking about stream snipers, Rust, 5HeadNN or anything stream related — answer in context of being a Kick stream chatbot.`);
     if (r) await sendChatMessage(r, username);
     setCD(username);
     return;
