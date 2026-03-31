@@ -13,7 +13,7 @@ const fs = require('fs');
 const CONFIG = {
   channelSlug: '5headnn',
   streamerName: '5HeadNN',
-  botPrefix: '🐑 SheepSync →',
+  botPrefix: '[SheepSync]',
   commandPrefix: '!',
   cooldownSeconds: 5,
   chatroomId: 5351258,
