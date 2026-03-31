@@ -115,7 +115,7 @@ async function sendChatMessage(message) {
     const res = await fetch(`https://api.kick.com/public/v1/chat`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ broadcaster_user_id: CONFIG.broadcasterId, content: trimmed, type: 'bot' }),
+      body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), content: trimmed, type: 'message' }),
     });
     const data = await res.json();
     if (res.ok) {
