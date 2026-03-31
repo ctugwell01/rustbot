@@ -52,7 +52,8 @@ async function getAppToken() {
       appAccessToken = data.access_token;
       console.log('✅ Got Kick app access token');
       // Refresh before it expires
-      setTimeout(getAppToken, (data.expires_in - 60) * 1000);
+      const refreshIn = Math.min((data.expires_in - 60) * 1000, 2147483647);
+      setTimeout(getAppToken, refreshIn);
       return true;
     } else {
       console.error('❌ Token error:', data);
