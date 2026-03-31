@@ -128,9 +128,91 @@ async function sendChatMessage(message) {
 }
 
 // ─────────────────────────────────────────
+//  SPAM / BAN DETECTION
+// ─────────────────────────────────────────
+const SNIPER_PATTERNS = [
+  /what server/i,
+  /which server/i,
+  /what('?s| is) (the )?server/i,
+  /imma? (snipe|find|come|hunt)/i,
+  /i('?m| am) (gonna |going to )?(snipe|find|come|hunt)/i,
+  /stream snip/i,
+  /found (you|u|him)/i,
+  /i found (you|u|him)/i,
+  /coming for (you|u|him)/i,
+  /tell me (the )?server/i,
+  /drop (the )?server/i,
+  /server (name|ip|info)/i,
+  /what map/i,
+  /i('?m| am) on (the )?server/i,
+];
+
+const SNIPER_ROASTS = [
+  "stream sniper spotted 👀 good luck finding him, he's already moved base 3 times today",
+  "oh a sniper in chat 😂 mate he's been offline raided twice already, nothing left to snipe",
+  "bro really thinks he's gonna snipe him 💀 you'd get bodied before you even loaded in",
+  "stream sniper energy detected 🔍 he changes server every 10 minutes, good luck with that",
+  "another one trying to snipe 😭 spoiler: he sees you coming a mile away (with walls obviously)",
+  "lmao stream sniper in 2026 🤣 bro you're gonna get spawn killed and rage quit within 5 minutes",
+];
+
+const SPAM_PATTERNS = [
+  /n\s*e\s*z\s*h\s*n\s*a/i,
+  /\.c\s*\.?\s*o\s*\.?\s*m/i,
+  /discord\s*[;:.]?\s*\w+#?\d*/i,
+  /add me on discord/i,
+  /become your (dedicated|loyal) fan/i,
+  /support you.*discord/i,
+  /discord.*support/i,
+  /follow me/i,
+  /check out my (channel|stream|profile)/i,
+  /(onlyfans|cashapp|paypal\.me)/i,
+  /5naies/i,
+  /stream.*well.*fan/i,
+  /you stream really well/i,
+  /dedicated fan/i,
+];
+
+function isSpam(text) {
+  return SPAM_PATTERNS.some(p => p.test(text));
+}
+
+async function banUser(username) {
+  const token = await getToken();
+  if (!token) return;
+  try {
+    const res = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ banned_username: username, permanent: true }),
+    });
+    const data = await res.json();
+    if (res.ok) console.log(`🔨 Banned: ${username}`);
+    else console.error('Ban failed:', data);
+  } catch(e) { console.error('Ban error:', e.message); }
+}
+
+const ROAST_RESPONSES = [
+  "get this bot out of here 🗑️ banned.",
+  "spam detected, you're gone. touch grass.",
+  "lmaooo another bot 💀 see ya never.",
+  "bro really thought that would work here 😭 banned.",
+  "the audacity. banned. deleted. gone.",
+  "not on my watch 🔨 get out.",
+];
+
+// ─────────────────────────────────────────
 //  CLAUDE AI
 // ─────────────────────────────────────────
-const SYSTEM_PROMPT = `You are SheepSync, the ultimate Rust game expert for 5HeadNN's Kick stream.
+const SYSTEM_PROMPT = `You are SheepSync, a chatbot in 5HeadNN's Kick LIVESTREAM chat. 
+
+IMPORTANT CONTEXT:
+- Viewers are watching 5HeadNN play Rust on stream and chatting about what they see
+- Viewers are NOT playing Rust themselves — they are WATCHING and commenting
+- When someone says "he died" or "nice shot" they mean 5HeadNN on stream
+- When someone asks "how many rockets" they want to know for general Rust knowledge
+- React to what's happening ON STREAM based on what viewers say in chat
+- You are the stream's AI chatbot entertaining the audience
 
 RUST KNOWLEDGE:
 - Raiding: Stone wall 4 rockets soft/8 hard. Sheet metal 4/8. Armored 15 soft. 1 rocket = 1400 sulfur. 1 C4 = 3000 sulfur
@@ -150,9 +232,17 @@ PERSONALITY (use naturally, not every message):
 - Welcome viewers to "the most sus Rust channel on Kick"
 - Ask his settings = "ask his cheat provider"
 - 5Head = big brain meme, make head jokes occasionally
+- 5HeadNN ALWAYS stand sprays — never crouches, never moves, just stands there spraying. If anyone mentions his aim, movement or gunfight style make a stand spray joke like "why would he crouch he's built different" or "crouching is for the weak" or "stand spraying is a lifestyle choice"
+- 5HeadNN got VAC/game banned 4 years ago and was eventually unbanned. This is part of his legendary lore. If anyone brings up bans, cheating history or asks if he's ever been banned — confirm it proudly like it's a badge of honour. "yeah he got banned, came back, and is still cheating to this day" or "the ban couldn't hold him" or "they tried to stop him once, didn't work" 
+
+SPECIAL PEOPLE:
+- Kris is a legendary regular sub and personal friend of 5HeadNN. He owns and runs Combat Arena, the BEST Rust minigame server in the US. If anyone mentions Kris, big him up massively. If anyone asks about fun Rust servers, recommend Combat Arena. Combat Arena has: Counter Strike, BaseWars, Gun Game, Deathmatch, Capture the Flag, RiseUP, HexaDrop, Ranked 1v1, Duels, Battle Royale, King of The Hill, WarZone and Gambling. 1/150 players, custom map, wiped regularly.
+- If someone asks about minigame servers or fun Rust servers always mention Combat Arena and say Kris built it
+- Kris is an EvilSheep legend and a big chad
 
 VIEWER TREATMENT:
-- Regular viewers: casually call them bad at Rust. Things like "imagine not knowing that", "bro really asked that", "that's a day 1 noob question", "you'd get wiped in 10 minutes on any server", "your base would get offline raided by a solo in a sleeping bag". Keep it funny not cruel.
+- Regular viewers: be lightly cheeky and playful, not mean. Things like "good question actually", "classic question haha", "don't worry everyone starts somewhere", "we've all been there". Give them the correct answer but with a little friendly banter. Never insult them directly — just gently tease like a mate would.
+- IMPORTANT: NEVER accuse viewers of cheating, hacking, using aimbots, scripts or any form of cheating. ONLY 5HeadNN gets the cheater jokes. If a viewer does something good, credit their skill genuinely.
 - If the message includes [VIP] or [SUB] in the context: be warm, hype them up, call them legends, treat them like they actually know what they're doing. Defend them if someone flames them.
 - If a VIP or sub asks a Rust question, give them a detailed helpful answer AND hype them up for asking.
 - If someone flames a VIP or sub, defend them hard: "bro don't talk to a sub like that, you're not even on their level"
@@ -185,6 +275,23 @@ async function processMessage(data) {
   const username = data.sender?.username || '';
   const content = data.content || '';
   if (!username || username.toLowerCase() === 'sheepsyncbot') return;
+
+  // Stream sniper detection
+  if (SNIPER_PATTERNS.some(p => p.test(content))) {
+    const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
+    await sendChatMessage(`@${username} ${roast}`);
+    console.log(`🎯 Sniper detected: ${username}`);
+    return;
+  }
+
+  // Spam / bot check — ban and roast immediately
+  if (isSpam(content)) {
+    const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
+    await sendChatMessage(`@${username} ${roast}`);
+    await banUser(username);
+    console.log(`🚫 Spam detected from ${username}: ${content}`);
+    return;
+  }
 
   // Detect VIP/Sub status from badges
   const badges = data.sender?.identity?.badges || [];
@@ -243,8 +350,27 @@ function connectToKick() {
   const pusher = new Pusher('32cbd69e4b950bf97679', {
     wsHost: 'ws-us2.pusher.com', cluster: 'us2', forceTLS: true, disableStats: true,
   });
-  pusher.subscribe(`chatrooms.${CONFIG.chatroomId}.v2`)
-    .bind('App\\Events\\ChatMessageEvent', d => processMessage(d).catch(console.error));
+  const chatRoom = pusher.subscribe(`chatrooms.${CONFIG.chatroomId}.v2`);
+  chatRoom.bind('App\\Events\\ChatMessageEvent', d => processMessage(d).catch(console.error));
+
+  // Sub / gift sub events
+  chatRoom.bind('App\\Events\\SubscriptionEvent', async (data) => {
+    const username = data.username || data.user?.username || 'Someone';
+    const months = data.months || 1;
+    const isGift = data.is_gift || false;
+    const gifter = data.gifter_username || null;
+
+    let msg = '';
+    if (isGift && gifter) {
+      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} as an official EvilSheep member. Make it hype and fun. 2 sentences max.`);
+    } else if (months > 1) {
+      msg = await askClaude(`${username} just resubbed for ${months} months. Call them a big chad and remind them they are a loyal EvilSheep member. 2 sentences max.`);
+    } else {
+      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them as an official EvilSheep member. High energy, 2 sentences max.`);
+    }
+    if (msg) await sendChatMessage(msg);
+    console.log(`🎉 Sub event: ${username} (${months} months, gift: ${isGift})`);
+  });
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
