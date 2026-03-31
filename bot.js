@@ -151,6 +151,12 @@ PERSONALITY (use naturally, not every message):
 - Ask his settings = "ask his cheat provider"
 - 5Head = big brain meme, make head jokes occasionally
 
+VIEWER TREATMENT:
+- Regular viewers: casually call them bad at Rust. Things like "imagine not knowing that", "bro really asked that", "that's a day 1 noob question", "you'd get wiped in 10 minutes on any server", "your base would get offline raided by a solo in a sleeping bag". Keep it funny not cruel.
+- If the message includes [VIP] or [SUB] in the context: be warm, hype them up, call them legends, treat them like they actually know what they're doing. Defend them if someone flames them.
+- If a VIP or sub asks a Rust question, give them a detailed helpful answer AND hype them up for asking.
+- If someone flames a VIP or sub, defend them hard: "bro don't talk to a sub like that, you're not even on their level"
+
 Keep responses SHORT — max 2 sentences. Be hype, use gamer lingo.`;
 
 async function askClaude(q) {
@@ -180,12 +186,18 @@ async function processMessage(data) {
   const content = data.content || '';
   if (!username || username.toLowerCase() === 'sheepsyncbot') return;
 
-  console.log(`💬 [${username}]: ${content}`);
+  // Detect VIP/Sub status from badges
+  const badges = data.sender?.identity?.badges || [];
+  const isVIP = badges.some(b => b.type === 'vip' || b.type === 'moderator' || b.type === 'broadcaster');
+  const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'og' || b.type === 'founder');
+  const userStatus = isVIP ? '[VIP]' : isSub ? '[SUB]' : '[VIEWER]';
+
+  console.log(`💬 [${username}] ${userStatus}: ${content}`);
   const lower = content.toLowerCase();
 
   if (!greeted.has(username.toLowerCase())) {
     greeted.add(username.toLowerCase());
-    const g = await askClaude(`New viewer "${username}" just said: "${content}". Short hype Rust welcome. 1 sentence.`);
+    const g = await askClaude(`New viewer "${username}" ${userStatus} just said: "${content}". Short Rust welcome — treat them based on their status: ${userStatus}.`);
     if (g) await sendChatMessage(g);
     return;
   }
@@ -198,7 +210,7 @@ async function processMessage(data) {
     const args = rest.join(' ');
     if (STATIC[cmd.toLowerCase()]) { await sendChatMessage(STATIC[cmd.toLowerCase()]); return; }
     setCD(username);
-    const r = await askClaude(args ? `${cmd} ${args}` : cmd);
+    const r = await askClaude(`${userStatus} viewer ${username} asked: ${args ? `${cmd} ${args}` : cmd}`);
     if (r) await sendChatMessage(r);
     return;
   }
@@ -221,7 +233,7 @@ async function processMessage(data) {
   const isQ = lower.includes('?') ||
     lower.match(/\b(how|what|where|when|why|can|does|do|is|are|will|should|best|which)\b/) ||
     lower.match(/\b(raid|bp|blueprint|craft|farm|base|wipe|loot|weapon|gun|meta|rocket|c4|sulfur|scrap)\b/);
-  if (isQ) { setCD(username); const r = await askClaude(content); if (r) await sendChatMessage(r); }
+  if (isQ) { setCD(username); const r = await askClaude(`${userStatus} viewer ${username} says: ${content}`); if (r) await sendChatMessage(r); }
 }
 
 // ─────────────────────────────────────────
