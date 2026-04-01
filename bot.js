@@ -4,8 +4,7 @@
  */
 
 require('dotenv').config();
-const PusherLib = require('pusher-js');
-const Pusher = PusherLib.default || PusherLib;
+const Pusher = require('pusher-js/node');
 const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
 const crypto = require('crypto');
