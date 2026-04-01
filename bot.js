@@ -38,6 +38,19 @@ let tokens = null;
 let codeVerifier = null;
 const cooldowns = new Map();
 const greeted = new Set();
+const returning = new Set();
+let streamStartTime = null;
+
+const AUTO_MESSAGES = [
+  "if you're enjoying the stream smash that follow button, costs nothing and means everything",
+  "new here? chuck a follow and join the EvilSheep gang, we dont bite... much",
+  "subs get treated like royalty around here, just saying. !discord to join the community",
+  "reminder that !commands exist if you want Rust help from your favourite Welsh degen bot",
+  "if 5head carries this fight its the cheats. if he dies its skill issue. simple as",
+  "use !predict to see if 5head wins his next fight, spoiler: the scripts decide",
+  "enjoying the chaos? follow the channel and join the EvilSheep Discord: https://discord.gg/4DHRdH9dz5",
+  "subs are big chads. NNs are NNs. the choice is yours lads",
+];
 
 // ─────────────────────────────────────────
 //  PKCE HELPERS
@@ -53,13 +66,38 @@ function generateCodeChallenge(verifier) {
 // ─────────────────────────────────────────
 //  TOKEN STORAGE
 // ─────────────────────────────────────────
-function saveTokens(t) {
-  fs.writeFileSync(TOKEN_FILE, JSON.stringify(t));
+async function saveTokens(t) {
   tokens = t;
-  console.log('💾 Tokens saved');
+  // Save to file as backup
+  try { fs.writeFileSync(TOKEN_FILE, JSON.stringify(t)); } catch(e) {}
+  // Save to Railway Variables so they survive redeploys
+  try {
+    await fetch(`https://backboard.railway.app/graphql/v2`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}`,
+      },
+      body: JSON.stringify({
+        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
+      }),
+    });
+    console.log('💾 Tokens saved to Railway Variables');
+  } catch(e) {
+    console.error('Failed to save to Railway:', e.message);
+  }
 }
 
 function loadTokens() {
+  // Try Railway Variable first
+  if (process.env.SAVED_TOKENS) {
+    try {
+      const t = JSON.parse(Buffer.from(process.env.SAVED_TOKENS, 'base64').toString());
+      console.log('✅ Tokens loaded from Railway Variables');
+      return t;
+    } catch(e) {}
+  }
+  // Fall back to file
   try {
     if (fs.existsSync(TOKEN_FILE)) return JSON.parse(fs.readFileSync(TOKEN_FILE));
   } catch(e) {}
@@ -319,7 +357,8 @@ const STATIC = {
   '!drops': 'Drops begin on 11/13 make sure to visit https://kick.facepunch.com/ and follow the directions to get your free Rust skin!',
   '!evilsheep': 'Check out EvilSheep: https://evilsheep.io/',
   '!combatarena': 'Best Rust minigame server in the US — Combat Arena built by Kris himself. Go check it out!',
-  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena',
+  '!clip': 'To clip the stream hit the scissors icon below the stream or press C on keyboard — share your clips in Discord!',
+  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict',
 };
 
 // ─────────────────────────────────────────
@@ -331,6 +370,15 @@ async function processMessage(data) {
   // Ignore own messages and protected bot accounts
   const IGNORED_BOTS = ['sheepsyncbot', 'botrix', 'streamelements', 'nightbot', 'moobot'];
   if (!username || IGNORED_BOTS.includes(username.toLowerCase())) return;
+
+  // Link filter — delete links from non-mods/non-subs
+  const hasLink = /https?:\/\/|www\.|\.com|\.io|\.gg|\.tv|\.net|\.org/i.test(content);
+  if (hasLink && !isVIP && !isSub) {
+    await deleteMessage(data.id || null);
+    await sendChatMessage(`links are for subs and mods only NN, get it deleted`, username);
+    console.log(`🔗 Link deleted from ${username}: ${content}`);
+    return;
+  }
 
   // Stream sniper detection — ignore the streamer himself
   const isStreamer = username.toLowerCase() === '5headnn';
@@ -360,8 +408,24 @@ async function processMessage(data) {
   console.log(`💬 [${username}] ${userStatus}: ${content}`);
   const lower = content.toLowerCase();
 
-  // Only add to greeted set, don't auto-greet everyone
-  greeted.add(username.toLowerCase());
+  // Welcome back returning viewers (seen before but not this session)
+  const userKey = username.toLowerCase();
+  if (returning.has(userKey) && !greeted.has(userKey)) {
+    greeted.add(userKey);
+    const welcomeBack = [
+      `${username} is back, the NN returns`,
+      `oh look who it is, ${username} crawling back`,
+      `${username} back again, couldn't stay away could you`,
+      `welcome back ${username}, pull up a chair`,
+    ];
+    const msg = welcomeBack[Math.floor(Math.random() * welcomeBack.length)];
+    await sendChatMessage(msg);
+    return;
+  }
+
+  // Mark as seen for future sessions
+  returning.add(userKey);
+  greeted.add(userKey);
 
   // Direct @ mention — always respond regardless of cooldown
   const isMention = lower.includes('@sheepsyncbot') || lower.includes('@sheepsync');
@@ -380,7 +444,61 @@ async function processMessage(data) {
   if (isCmd) {
     const [cmd, ...rest] = content.trim().split(' ');
     const args = rest.join(' ');
-    if (STATIC[cmd.toLowerCase()]) { await sendChatMessage(STATIC[cmd.toLowerCase()], username); return; }
+    const cmdLower = cmd.toLowerCase();
+
+    // !uptime
+    if (cmdLower === '!uptime') {
+      if (!streamStartTime) {
+        await sendChatMessage('stream just started or uptime unknown', username);
+      } else {
+        const diff = Date.now() - streamStartTime;
+        const hrs = Math.floor(diff / 3600000);
+        const mins = Math.floor((diff % 3600000) / 60000);
+        await sendChatMessage(`5head has been live for ${hrs > 0 ? hrs + 'h ' : ''}${mins}m — stand spraying for ${hrs > 0 ? hrs + 'h ' : ''}${mins}m straight`, username);
+      }
+      return;
+    }
+
+    // !followage
+    if (cmdLower === '!followage') {
+      const target = args || username;
+      try {
+        const res = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}/followers?username=${target}`);
+        const data = await res.json();
+        if (data?.followed_at) {
+          const since = new Date(data.followed_at);
+          const days = Math.floor((Date.now() - since) / 86400000);
+          const years = Math.floor(days / 365);
+          const months = Math.floor((days % 365) / 30);
+          const timeStr = years > 0 ? `${years}y ${months}m` : months > 0 ? `${months} months` : `${days} days`;
+          await sendChatMessage(`${target} has been following for ${timeStr}${isSub ? ' — loyal chad' : ' — still a NN though'}`, username);
+        } else {
+          await sendChatMessage(`${target} isn't following, typical NN behaviour`, username);
+        }
+      } catch(e) {
+        await sendChatMessage(`can't check followage right now`, username);
+      }
+      return;
+    }
+
+    // !predict
+    if (cmdLower === '!predict') {
+      const outcomes = [
+        "cheat settings are looking strong today, 5head wins this easily",
+        "recoil script is fully loaded, no chance the enemy survives",
+        "walls are giving him perfect info, this is free",
+        "aimbot calibrated and ready, enemy doesn't know what's coming",
+        "cheats are lagging today so it might actually be close",
+        "even with full assistance this looks rough ngl",
+        "the scripts are working overtime — easy win incoming",
+        "enemy is moving weird, 5head's walls can't track them — could go either way",
+      ];
+      const prediction = outcomes[Math.floor(Math.random() * outcomes.length)];
+      await sendChatMessage(prediction);
+      return;
+    }
+
+    if (STATIC[cmdLower]) { await sendChatMessage(STATIC[cmdLower], username); return; }
     setCD(username);
     const r = await askClaude(`${userStatus} viewer ${username} asked: ${args ? `${cmd} ${args}` : cmd}`);
     if (r) await sendChatMessage(r, username);
@@ -448,12 +566,21 @@ function connectToKick() {
   // Welcome 5head when stream goes live
   const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
   liveChannel.bind('App\\Events\\StreamerIsLive', async () => {
+    streamStartTime = Date.now();
     console.log('🟢 5HeadNN went live!');
     const welcome = await askClaude('5HeadNN just went live on Kick playing Rust. Welcome him in a casual Welsh Valleys style — low key, not too hype, maybe a light dig at him too. Short and natural like a mate welcoming another mate. Mention the cheating banter, stand spraying, and tell chat they can use !commands. Max 2 sentences, keep it real not cringe.');
     if (welcome) await sendChatMessage(welcome);
   });
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
+
+  // Auto message every 30 minutes
+  setInterval(async () => {
+    if (!streamStartTime) return; // Only when live
+    const msg = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
+    await sendChatMessage(msg);
+    console.log('📢 Auto message sent');
+  }, 30 * 60 * 1000);
 }
 
 // ─────────────────────────────────────────
