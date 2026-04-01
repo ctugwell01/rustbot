@@ -252,10 +252,12 @@ KEY PEOPLE:
 - Mods and VIPs get full respect, they are part of the crew
 
 HOW TO TALK TO PEOPLE:
-- NNs (regular viewers): "calm down NN", "typical NN behaviour", "you're such a NN", light dismissive banter
-- Subs: "big chad", "EvilSheep member", "you already know", treat them like royalty
-- 5HeadNN: always back him, always blame cheats when he does well, always mock the cheats when he dies
-- Dabz: "Dabz you're actually cracked mun, start believing in yourself"
+- NNs (regular viewers): call them NNs, be dismissive, light toxicity — "calm down NN", "typical NN", short and blunt
+- Subs: "big chad", "EvilSheep" — hype them but keep it natural, don't go overboard
+- 5HeadNN: always back him no matter what
+- NEVER start messages with "Yo [VIP]" or announce their status — just talk to them naturally
+- Keep responses SHORT — one sentence where possible, two max
+- Don't respond to everyone — only respond when directly @mentioned, when someone uses a !command, or when someone is being toxic about 5HeadNN"
 
 WELCOME:
 - When 5HeadNN goes live fire a casual Welsh Valleys welcome — mention best stand sprayer EU, the cheating banter, tell chat to use !commands. Keep it real not cringe, 2 sentences max
@@ -309,9 +311,15 @@ function isCD(u) { const l = cooldowns.get(u); return l && Date.now() - l < CONF
 function setCD(u) { cooldowns.set(u, Date.now()); }
 
 const STATIC = {
-  '!discord': '👾 Join the Discord: [your-discord-link]',
-  '!socials': '📱 Kick: kick.com/5headnn',
-  '!lurk': '👻 Thanks for lurking! Every viewer counts 🙏',
+  '!discord': 'https://discord.gg/4DHRdH9dz5',
+  '!socials': 'Kick: kick.com/5headnn | Discord: https://discord.gg/4DHRdH9dz5',
+  '!lurk': 'thanks for lurking me big W',
+  '!cheat': 'https://evilsheep.io/',
+  '!cheats': 'https://evilsheep.io/',
+  '!drops': 'Drops begin on 11/13 make sure to visit https://kick.facepunch.com/ and follow the directions to get your free Rust skin!',
+  '!evilsheep': 'Check out EvilSheep: https://evilsheep.io/',
+  '!combatarena': 'Best Rust minigame server in the US — Combat Arena built by Kris himself. Go check it out!',
+  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena',
 };
 
 // ─────────────────────────────────────────
@@ -352,12 +360,8 @@ async function processMessage(data) {
   console.log(`💬 [${username}] ${userStatus}: ${content}`);
   const lower = content.toLowerCase();
 
-  if (!greeted.has(username.toLowerCase())) {
-    greeted.add(username.toLowerCase());
-    const g = await askClaude(`New viewer "${username}" ${userStatus} just said: "${content}". Short Rust welcome — treat them based on their status: ${userStatus}.`);
-    if (g) await sendChatMessage(g, username);
-    return;
-  }
+  // Only add to greeted set, don't auto-greet everyone
+  greeted.add(username.toLowerCase());
 
   // Direct @ mention — always respond regardless of cooldown
   const isMention = lower.includes('@sheepsyncbot') || lower.includes('@sheepsync');
@@ -398,10 +402,15 @@ async function processMessage(data) {
     }
   }
 
-  const isQ = lower.includes('?') ||
-    lower.match(/\b(how|what|where|when|why|can|does|do|is|are|will|should|best|which)\b/) ||
-    lower.match(/\b(raid|bp|blueprint|craft|farm|base|wipe|loot|weapon|gun|meta|rocket|c4|sulfur|scrap)\b/);
-  if (isQ) { setCD(username); const r = await askClaude(`${userStatus} viewer ${username} says: ${content}`); if (r) await sendChatMessage(r, username); }
+  // Only respond if toxic towards 5head
+  const is5headInsult = lower.match(/\b(5head|5headnn|streamer)\b/) && 
+    lower.match(/\b(bad|trash|garbage|noob|nn|sucks|terrible|awful|dogsh|garbage|worst|crap|cheater|hacker)\b/);
+  
+  if (is5headInsult) { 
+    setCD(username); 
+    const r = await askClaude(`${userStatus} viewer ${username} is being toxic about 5HeadNN saying: "${content}". Defend 5head in Welsh Valleys degen style, call them a NN if not subbed. Short and spicy.`); 
+    if (r) await sendChatMessage(r, username); 
+  }
 }
 
 // ─────────────────────────────────────────
