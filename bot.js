@@ -4,7 +4,7 @@
  */
 
 require('dotenv').config();
-const Pusher = require('pusher-js/node');
+const Pusher = require('pusher-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
 const crypto = require('crypto');
@@ -397,7 +397,8 @@ async function processMessage(data) {
 //  PUSHER
 // ─────────────────────────────────────────
 function connectToKick() {
-  const pusher = new Pusher('32cbd69e4b950bf97679', {
+  const PusherClass = Pusher.default ? Pusher.default : Pusher;
+  const pusher = new PusherClass('32cbd69e4b950bf97679', {
     wsHost: 'ws-us2.pusher.com', cluster: 'us2', forceTLS: true, disableStats: true,
   });
   const chatRoom = pusher.subscribe(`chatrooms.${CONFIG.chatroomId}.v2`);
