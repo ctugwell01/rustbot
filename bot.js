@@ -568,6 +568,7 @@ function connectToKick() {
   liveChannel.bind('App\\Events\\StreamerIsLive', async () => {
     streamStartTime = Date.now();
     console.log('🟢 5HeadNN went live!');
+    announceGoLive().catch(console.error);
     const welcome = await askClaude('5HeadNN just went live on Kick playing Rust. Welcome him in a casual Welsh Valleys style — low key, not too hype, maybe a light dig at him too. Short and natural like a mate welcoming another mate. Mention the cheating banter, stand spraying, and tell chat they can use !commands. Max 2 sentences, keep it real not cringe.');
     if (welcome) await sendChatMessage(welcome);
   });
