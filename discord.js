@@ -143,12 +143,20 @@ const SPAM_PATTERNS = [
 client.once('ready', async () => {
   console.log(`✅ Discord bot ready as ${client.user.tag}`);
 
-  // Find general channel
+  // Find channels
   const guild = client.guilds.cache.get(CONFIG.guildId);
   if (guild) {
     generalChannel = guild.channels.cache.find(c =>
       c.name.includes('general') && c.isTextBased()
     );
+    // Use live channel for stream announcements if it exists
+    const liveChannel = guild.channels.cache.find(c =>
+      c.name === 'live' && c.isTextBased()
+    );
+    if (liveChannel) {
+      console.log(`📢 Live channel found: ${liveChannel.name}`);
+      client.liveChannel = liveChannel;
+    }
     console.log(`📢 General channel: ${generalChannel?.name}`);
   }
 });
@@ -270,12 +278,12 @@ async function announceGoLive() {
     .setDescription('EU\'s finest stand sprayer is back. Come watch the most sus Rust gameplay on the internet.')
     .addFields(
       { name: 'Watch Live', value: 'https://kick.com/5headnn', inline: true },
-      { name: 'Discord', value: 'https://discord.gg/4DHRdH9dz5', inline: true },
     )
     .setFooter({ text: 'powered by SheepSync' })
     .setTimestamp();
 
-  await generalChannel.send({ content: '@everyone 5head is live!', embeds: [embed] });
+  const target = client.liveChannel || generalChannel;
+  await target.send({ content: '@everyone 5head is live!', embeds: [embed] });
   console.log('📢 Discord live announcement sent');
 
   // Reset after stream
