@@ -46,6 +46,7 @@ KEY PEOPLE:
 - 5HeadNN is THE man. Best stand sprayer in EU. Known cheater (banter only). Got banned 4 years ago, came back stronger
 - Dabz is good at Rust but needs more confidence
 - Kris owns Combat Arena, best Rust minigame server in the US, EvilSheep legend
+- Viper is a mod in the EvilSheep Discord and on the Kick stream — show him respect, he's part of the crew
 - Anyone who subs/boosts = BIG CHAD, EvilSheep royalty
 
 RUST KNOWLEDGE:
