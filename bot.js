@@ -458,6 +458,18 @@ async function processMessage(data) {
     const args = rest.join(' ');
     const cmdLower = cmd.toLowerCase();
 
+    // !live — manual trigger for welcome message
+    if (cmdLower === '!live') {
+      const isOwner = username.toLowerCase() === '5headnn';
+      if (isOwner) {
+        streamStartTime = Date.now();
+        announceGoLive().catch(console.error);
+        const welcome = await askClaude('5HeadNN just went live on Kick playing Rust. Welcome him in a casual Welsh Valleys style. Short, 2 sentences max.');
+        if (welcome) await sendChatMessage(welcome);
+      }
+      return;
+    }
+
     // !uptime
     if (cmdLower === '!uptime') {
       if (!streamStartTime) {
@@ -544,6 +556,17 @@ async function processMessage(data) {
 }
 
 // ─────────────────────────────────────────
+//  GO LIVE HANDLER
+// ─────────────────────────────────────────
+async function handleGoLive() {
+  streamStartTime = Date.now();
+  console.log('🟢 Firing go live handler!');
+  try { await announceGoLive(); } catch(e) { console.error('Discord announce error:', e.message); }
+  const welcome = await askClaude('5HeadNN just went live on Kick playing Rust. Welcome him in a casual Welsh Valleys style — low key, not too hype, maybe a light dig at him too. Short and natural like a mate welcoming another mate. Mention the cheating banter, stand spraying, and tell chat they can use !commands. Max 2 sentences, keep it real not cringe.');
+  if (welcome) await sendChatMessage(welcome);
+}
+
+// ─────────────────────────────────────────
 //  PUSHER
 // ─────────────────────────────────────────
 function connectToKick() {
@@ -576,14 +599,34 @@ function connectToKick() {
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
 
   // Welcome 5head when stream goes live
+  // Pusher live events (backup)
   const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
-  liveChannel.bind('App\\Events\\StreamerIsLive', async () => {
-    streamStartTime = Date.now();
-    console.log('🟢 5HeadNN went live!');
-    announceGoLive().catch(console.error);
-    const welcome = await askClaude('5HeadNN just went live on Kick playing Rust. Welcome him in a casual Welsh Valleys style — low key, not too hype, maybe a light dig at him too. Short and natural like a mate welcoming another mate. Mention the cheating banter, stand spraying, and tell chat they can use !commands. Max 2 sentences, keep it real not cringe.');
-    if (welcome) await sendChatMessage(welcome);
-  });
+  liveChannel.bind('App\\Events\\StreamerIsLive', () => handleGoLive());
+  liveChannel.bind('App\\Events\\LivestreamUpdated', () => handleGoLive());
+
+  // Poll Kick API every 60 seconds to detect going live automatically
+  let wasLive = false;
+  setInterval(async () => {
+    try {
+      const res = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+      });
+      const data = await res.json();
+      const isLive = data?.livestream?.is_live === true;
+
+      if (isLive && !wasLive) {
+        wasLive = true;
+        console.log('🟢 5HeadNN is live (detected by poll)!');
+        await handleGoLive();
+      } else if (!isLive && wasLive) {
+        wasLive = false;
+        streamStartTime = null;
+        console.log('🔴 Stream ended');
+      }
+    } catch(e) {
+      console.error('Live check error:', e.message);
+    }
+  }, 60000);
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
 
