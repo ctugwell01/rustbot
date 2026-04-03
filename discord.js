@@ -93,13 +93,14 @@ function isBooster(member) {
 }
 
 function hasRole(member, roleName) {
-  return member?.roles?.cache?.some(r => r.name.toLowerCase().includes(roleName.toLowerCase()));
+  return member?.roles?.cache?.some(r => r.name.toLowerCase() === roleName.toLowerCase());
 }
 
 function getUserStatus(member) {
   if (!member) return '[NN]';
   if (member.id === member.guild.ownerId) return '[OWNER]';
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return '[MOD]';
+  if (hasRole(member, 'mod.')) return '[MOD]';
   if (isBooster(member)) return '[CHAD]';
   if (hasRole(member, 'vip') || hasRole(member, 'sub')) return '[VIP]';
   return '[NN]';
@@ -198,9 +199,10 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
-  // Link filter for NNs
+  // Link filter for NNs only — mods, boosters, VIPs can post links
+  const isMod = userStatus === '[MOD]' || userStatus === '[OWNER]';
   const hasLink = /https?:\/\/|www\./i.test(content);
-  if (hasLink && !isPrivileged && !isMention) {
+  if (hasLink && !isPrivileged && !isMod && !isMention) {
     try {
       await message.delete();
       await message.channel.send(`${message.author} links are for boosters and mods only NN`);
