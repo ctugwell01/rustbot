@@ -318,42 +318,41 @@ async function banUser(username, messageId = null) {
   // Delete their message first
   if (messageId) await deleteMessage(messageId);
   try {
-    // Use Kick moderation API
-    const res = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Bearer ${token}`, 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+    // Try all known Kick ban endpoint formats
+    const banAttempts = [
+      {
+        url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`,
+        body: { banned_user: { username }, permanent: true, reason: 'Spam' }
       },
-      body: JSON.stringify({ 
-        banned_user: { username: username },
-        permanent: true, 
-        reason: 'Spam detected by SheepSync'
-      }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      console.log(`🔨 Banned via API: ${username}`);
-    } else {
-      console.error('Ban API failed:', data);
-      // Try alternative body format
-      const res2 = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`, 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ username: username, permanent: true }),
-      });
-      const data2 = await res2.json();
-      if (res2.ok) {
-        console.log(`🔨 Banned via API v2: ${username}`);
-      } else {
-        console.error('Ban API v2 failed:', data2);
-      }
+      {
+        url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`,
+        body: { banned_user: { username }, permanent: true, reason: 'Spam' }
+      },
+      {
+        url: `https://api.kick.com/public/v1/moderation/bans`,
+        body: { broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, permanent: true }
+      },
+    ];
+
+    let banned = false;
+    for (const attempt of banAttempts) {
+      try {
+        const res = await fetch(attempt.url, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(attempt.body),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          console.log(`🔨 Banned: ${username} via ${attempt.url}`);
+          banned = true;
+          break;
+        } else {
+          console.error(`Ban failed (${attempt.url}):`, data);
+        }
+      } catch(e) { console.error('Ban error:', e.message); }
     }
+    if (!banned) console.error(`❌ All ban attempts failed for ${username}`);
   } catch(e) { console.error('Ban error:', e.message); }
 }
 
