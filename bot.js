@@ -224,15 +224,43 @@ const SPAM_PATTERNS = [
   /dedicated fan/i,
   /b[\s]*G[\s]*t[\s]*N/i,
   /\w+[\s\W]*(=>|->|=|\.)\s*\w+\.(com|net|io|gg|tv)/i,
+  /write\s+[wW]\s+in\s+(his|her|their)\s+chat/i,
+  /go\s+to\s+(his|her|their)\s+chat/i,
+  /check\s+out\s+@\w+\s+on\s+kick/i,
+  /wants\s+to\s+(stream|collab)\s+with/i,
+  /said\s+he\s+wants\s+to\s+(stream|collab)/i,
+  /follow\s+@?\w+\s+on\s+kick/i,
+  /raid\s+@?\w+\s+on\s+kick/i,
+  /his\s+kick\s+is\s*:?\s*@?\w+/i,
+  /her\s+kick\s+is\s*:?\s*@?\w+/i,
+  /their\s+kick\s+is\s*:?\s*@?\w+/i,
+  /kick\s+is\s*:?\s*@\w+/i,
+  /streamer\s+said\s+he/i,
+  /streamer\s+wants\s+to/i,
+  /stream\s+with\s+u/i,
+  /live\s+rn\s+.{0,30}kick/i,
+  /hes\s+live\s+.{0,20}kick/i,
+  /he.s\s+live\s+.{0,20}kick/i,
+  /ownkick/i,
+  /aio\s+bot\s+system/i,
+  /customizable\s+usernames/i,
+  /youtube\.com\/watch/i,
+  /youtu\.be\//i,
+  /tg\s*:\s*@\w+/i,
+  /\|\s*tg\s*:/i,
+  /via\s+customizable/i,
 ];
 
 function isSpamAdvanced(text) {
-  // Strip spaces and check cleaned version too
   const cleaned = text.replace(/\s+/g, '').toLowerCase();
-  const spamWords = ['nezhna', 'onlyfans', 'cashapp', 'paypalme', '5naies'];
+  const spamWords = ['nezhna', 'onlyfans', 'cashapp', 'paypalme', '5naies', 'ownkick', 'aiobots'];
   if (spamWords.some(w => cleaned.includes(w))) return true;
-  // Check for domain patterns with spaces
   if (/\w+\s*\.\s*(com|net|io|gg|tv|co)/i.test(text)) return true;
+  // Any message with multiple links/@ mentions is likely spam
+  const atMentions = (text.match(/@\w+/g) || []).length;
+  const links = (text.match(/https?:\/\/\S+/g) || []).length;
+  if (links >= 2) return true;
+  if (atMentions >= 2 && links >= 1) return true;
   return SPAM_PATTERNS.some(p => p.test(text));
 }
 
