@@ -756,6 +756,21 @@ app.get('/', (req, res) => {
   }
 });
 
+app.get('/logout', (req, res) => {
+  tokens = null;
+  try { require('fs').unlinkSync(TOKEN_FILE); } catch(e) {}
+  console.log('🔓 Tokens cleared — re-auth required');
+  res.redirect('/');
+});
+
+app.get('/status', (req, res) => {
+  res.json({
+    authorized: !!tokens,
+    expires_at: tokens?.expires_at ? new Date(tokens.expires_at).toISOString() : null,
+    expired: tokens ? Date.now() > tokens.expires_at : true,
+  });
+});
+
 app.get('/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.send('No code received');
