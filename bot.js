@@ -208,8 +208,8 @@ const SNIPER_ROASTS = [
 ];
 
 const SPAM_PATTERNS = [
-  /n\s*e\s*z\s*h\s*n\s*a/i,
-  /\.c\s*\.?\s*o\s*\.?\s*m/i,
+  /n[\s\W]*e[\s\W]*z[\s\W]*h[\s\W]*n[\s\W]*a/i,
+  /\w+[\s\W]*\.[\s\W]*c[\s\W]*o[\s\W]*m/i,
   /discord\s*[;:.]?\s*\w+#?\d*/i,
   /add me on discord/i,
   /become your (dedicated|loyal) fan/i,
@@ -222,7 +222,19 @@ const SPAM_PATTERNS = [
   /stream.*well.*fan/i,
   /you stream really well/i,
   /dedicated fan/i,
+  /b[\s]*G[\s]*t[\s]*N/i,
+  /\w+[\s\W]*(=>|->|=|\.)\s*\w+\.(com|net|io|gg|tv)/i,
 ];
+
+function isSpamAdvanced(text) {
+  // Strip spaces and check cleaned version too
+  const cleaned = text.replace(/\s+/g, '').toLowerCase();
+  const spamWords = ['nezhna', 'onlyfans', 'cashapp', 'paypalme', '5naies'];
+  if (spamWords.some(w => cleaned.includes(w))) return true;
+  // Check for domain patterns with spaces
+  if (/\w+\s*\.\s*(com|net|io|gg|tv|co)/i.test(text)) return true;
+  return SPAM_PATTERNS.some(p => p.test(text));
+}
 
 function isSpam(text) {
   return SPAM_PATTERNS.some(p => p.test(text));
@@ -402,7 +414,7 @@ async function processMessage(data) {
   }
 
   // Spam / bot check — ban and roast immediately
-  if (isSpam(content)) {
+  if (isSpam(content) || isSpamAdvanced(content)) {
     const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
     await sendChatMessage(roast, username);
     await banUser(username, data.id || null);
@@ -457,6 +469,18 @@ async function processMessage(data) {
     const [cmd, ...rest] = content.trim().split(' ');
     const args = rest.join(' ');
     const cmdLower = cmd.toLowerCase();
+
+    // !ban — manual ban command for streamer and mods
+    if (cmdLower === '!ban') {
+      const isMod = isVIP || username.toLowerCase() === '5headnn';
+      if (isMod && args) {
+        const targetUser = args.split(' ')[0].replace('@', '');
+        await sendChatMessage(`/ban ${targetUser} banned by mod`);
+        await sendChatMessage(`${targetUser} got the hammer 🔨`, username);
+        console.log(`🔨 Manual ban: ${targetUser} by ${username}`);
+      }
+      return;
+    }
 
     // !live — manual trigger for welcome message
     if (cmdLower === '!live') {
