@@ -286,19 +286,41 @@ async function banUser(username, messageId = null) {
   // Delete their message first
   if (messageId) await deleteMessage(messageId);
   try {
-    // Try official moderation endpoint first
+    // Use Kick moderation API
     const res = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ banned_user: username, permanent: true, reason: 'Spam detected by SheepSync' }),
+      headers: { 
+        'Authorization': `Bearer ${token}`, 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({ 
+        banned_user: { username: username },
+        permanent: true, 
+        reason: 'Spam detected by SheepSync'
+      }),
     });
     const data = await res.json();
     if (res.ok) {
-      console.log(`🔨 Banned: ${username}`);
+      console.log(`🔨 Banned via API: ${username}`);
     } else {
-      console.error('Ban failed:', data);
-      // Fallback: send /ban command via chat
-      await sendChatMessage(`/ban ${username} spam bot`);
+      console.error('Ban API failed:', data);
+      // Try alternative body format
+      const res2 = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`, 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ username: username, permanent: true }),
+      });
+      const data2 = await res2.json();
+      if (res2.ok) {
+        console.log(`🔨 Banned via API v2: ${username}`);
+      } else {
+        console.error('Ban API v2 failed:', data2);
+      }
     }
   } catch(e) { console.error('Ban error:', e.message); }
 }
