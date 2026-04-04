@@ -577,8 +577,8 @@ function connectToKick() {
   const chatRoom = pusher.subscribe(`chatrooms.${CONFIG.chatroomId}.v2`);
   chatRoom.bind('App\\Events\\ChatMessageEvent', d => processMessage(d).catch(console.error));
 
-  // Sub / gift sub events
-  chatRoom.bind('App\\Events\\SubscriptionEvent', async (data) => {
+  // Sub / gift sub events — bind multiple possible event names
+  const handleSubEvent = async (data) => {
     const username = data.username || data.user?.username || 'Someone';
     const months = data.months || 1;
     const isGift = data.is_gift || false;
@@ -594,6 +594,16 @@ function connectToKick() {
     }
     if (msg) await sendChatMessage(msg);
     console.log(`🎉 Sub event: ${username} (${months} months, gift: ${isGift})`);
+  };
+
+  chatRoom.bind('App\\Events\\SubscriptionEvent', handleSubEvent);
+  chatRoom.bind('App\\Events\\GiftedSubscriptionsEvent', handleSubEvent);
+  chatRoom.bind('App\\Events\\UserSubscribed', handleSubEvent);
+  chatRoom.bind('App\\Events\\ChatMessageEvent', async (data) => {
+    // Detect sub messages from Kick system
+    if (data?.sender?.username === 'Kick' || data?.type === 'subscription') {
+      await handleSubEvent(data);
+    }
   });
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
