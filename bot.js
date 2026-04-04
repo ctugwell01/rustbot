@@ -251,17 +251,49 @@ const SPAM_PATTERNS = [
   /via\s+customizable/i,
 ];
 
+function normalizeText(text) {
+  // Replace unicode lookalike characters with ASCII equivalents
+  return text
+    .replace(/[оοооο]/g, 'o')
+    .replace(/[ааа]/g, 'a')
+    .replace(/[ссс]/g, 'c')
+    .replace(/[ррр]/g, 'r')
+    .replace(/[еее]/g, 'e')
+    .replace(/[ііі]/g, 'i')
+    .replace(/[ккк]/g, 'k')
+    .replace(/[ոﭓ]/g, 'n')
+    .replace(/[դ]/g, 'd')
+    .replace(/[Ա-Ֆա-և]/g, c => c) // Armenian
+    .replace(/[ԝԝ]/g, 'w')
+    .replace(/[ϲϲ]/g, 'c')
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
 function isSpamAdvanced(text) {
   const cleaned = text.replace(/\s+/g, '').toLowerCase();
-  const spamWords = ['nezhna', 'onlyfans', 'cashapp', 'paypalme', '5naies', 'ownkick', 'aiobots'];
-  if (spamWords.some(w => cleaned.includes(w))) return true;
+  const normalized = normalizeText(text).replace(/\s+/g, '');
+  
+  const spamWords = ['nezhna', 'onlyfans', 'cashapp', 'paypalme', '5naies', 'ownkick', 'aiobots', 'ownkic'];
+  if (spamWords.some(w => cleaned.includes(w) || normalized.includes(w))) return true;
   if (/\w+\s*\.\s*(com|net|io|gg|tv|co)/i.test(text)) return true;
-  // Any message with multiple links/@ mentions is likely spam
+  
+  // Check normalized version for domain patterns
+  if (/\w+\.(com|net|io|gg|tv|co)/i.test(normalized)) return true;
+  
   const atMentions = (text.match(/@\w+/g) || []).length;
   const links = (text.match(/https?:\/\/\S+/g) || []).length;
   if (links >= 2) return true;
   if (atMentions >= 2 && links >= 1) return true;
-  return SPAM_PATTERNS.some(p => p.test(text));
+  
+  // Check for youtube spam combo
+  if (normalized.includes('youtube') && normalized.includes('kick')) return true;
+  if (normalized.includes('24/7') && normalized.includes('bot')) return true;
+  if (normalized.includes('cheapest') && normalized.includes('bot')) return true;
+  if (normalized.includes('custom') && normalized.includes('username') && normalized.includes('bot')) return true;
+  
+  return SPAM_PATTERNS.some(p => p.test(text)) || SPAM_PATTERNS.some(p => p.test(normalized));
 }
 
 function isSpam(text) {
