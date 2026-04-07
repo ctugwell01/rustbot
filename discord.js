@@ -263,9 +263,25 @@ client.on('messageCreate', async (message) => {
 
   // @ mention — always respond
   if (isMention) {
-    const question = content.replace(/<@!?\d+>/g, '').trim();
+    // Replace Discord mention IDs with actual usernames
+    let question = content;
+    const mentionIds = content.matchAll(/<@!?(\d+)>/g);
+    for (const match of mentionIds) {
+      const userId = match[1];
+      if (userId === client.user.id) {
+        question = question.replace(match[0], '');
+      } else {
+        try {
+          const mentionedMember = await message.guild.members.fetch(userId);
+          question = question.replace(match[0], `@${mentionedMember.user.username}`);
+        } catch(e) {
+          question = question.replace(match[0], '@someone');
+        }
+      }
+    }
+    question = question.trim();
     setCooldown(message.author.id);
-    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is talking to you directly: "${question}"`, message.channel.id);
+    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is asking you: "${question}". If they mention someone by name, talk about that person based on what you know.`, message.channel.id);
     if (r) await message.reply(r);
     return;
   }
