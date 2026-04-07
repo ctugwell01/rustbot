@@ -30,6 +30,20 @@ const client = new Client({
 const cooldowns = new Map();
 let generalChannel = null;
 let liveMessageSent = false;
+// Conversation history per channel (max 10 messages)
+const conversationHistory = new Map();
+
+function getHistory(channelId) {
+  if (!conversationHistory.has(channelId)) conversationHistory.set(channelId, []);
+  return conversationHistory.get(channelId);
+}
+
+function addToHistory(channelId, role, content) {
+  const history = getHistory(channelId);
+  history.push({ role, content });
+  if (history.length > 10) history.shift(); // Keep last 10 messages
+  conversationHistory.set(channelId, history);
+}
 
 // ─────────────────────────────────────────
 //  SYSTEM PROMPT
@@ -74,15 +88,25 @@ function isOnCooldown(userId) {
 }
 function setCooldown(userId) { cooldowns.set(userId, Date.now()); }
 
-async function askClaude(question) {
+async function askClaude(question, channelId = null) {
   try {
+    const history = channelId ? getHistory(channelId) : [];
+    const messages = [
+      ...history,
+      { role: 'user', content: question }
+    ];
     const r = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 150,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: question }],
+      messages,
     });
-    return r.content[0].text.trim();
+    const reply = r.content[0].text.trim();
+    if (channelId) {
+      addToHistory(channelId, 'user', question);
+      addToHistory(channelId, 'assistant', reply);
+    }
+    return reply;
   } catch(e) {
     console.error('Claude error:', e.message);
     return null;
@@ -241,7 +265,7 @@ client.on('messageCreate', async (message) => {
   if (isMention) {
     const question = content.replace(/<@!?\d+>/g, '').trim();
     setCooldown(message.author.id);
-    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is talking to you directly: "${question}"`);
+    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is talking to you directly: "${question}"`, message.channel.id);
     if (r) await message.reply(r);
     return;
   }
@@ -252,7 +276,7 @@ client.on('messageCreate', async (message) => {
 
   if (is5headInsult) {
     setCooldown(message.author.id);
-    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is being toxic about 5HeadNN: "${content}". Defend 5head, Welsh Valleys style. Short and spicy.`);
+    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is being toxic about 5HeadNN: "${content}". Defend 5head, Welsh Valleys style. Short and spicy.`, message.channel.id);
     if (r) await message.reply(r);
     return;
   }
@@ -263,7 +287,7 @@ client.on('messageCreate', async (message) => {
 
   if (isRustQ) {
     setCooldown(message.author.id);
-    const r = await askClaude(`${userStatus} Discord member ${message.author.username} asks: "${content}"`);
+    const r = await askClaude(`${userStatus} Discord member ${message.author.username} asks: "${content}"`, message.channel.id);
     if (r) await message.reply(r);
   }
 });
