@@ -589,8 +589,10 @@ async function processMessage(data) {
   const username = data.sender?.username || '';
   const content = data.content || '';
   // Ignore own messages and protected bot accounts
-  const IGNORED_BOTS = ['sheepsyncbot', 'botrix', 'streamelements', 'nightbot', 'moobot'];
-  if (!username || IGNORED_BOTS.includes(username.toLowerCase())) return;
+  const IGNORED_BOTS = ['sheepsyncbot', 'sheepsync', 'botrix', 'streamelements', 'nightbot', 'moobot'];
+  if (!username || IGNORED_BOTS.includes(username.toLowerCase().replace(/\s/g, ''))) return;
+  // Also ignore any message that starts with our bot prefix
+  if (content.startsWith('!meta') && username.toLowerCase().includes('sheepsync')) return;
 
   // Link filter — delete links from non-mods/non-subs
   const hasLink = /https?:\/\/|www\.|\.com|\.io|\.gg|\.tv|\.net|\.org/i.test(content);
@@ -840,14 +842,22 @@ function connectToKick() {
   setInterval(async () => {
     try {
       // Try public API first
-      const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${CONFIG.channelSlug}`, {
-        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+      // Try multiple endpoints to find livestream status
+      let isLive = false;
+      
+      // Try v1 channel endpoint
+      const res = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
       });
       const data = await res.json();
-      const channelList = data?.data || data;
-      const channel = Array.isArray(channelList) ? channelList[0] : channelList;
-      const isLive = channel?.livestream !== null && channel?.livestream !== undefined && channel?.livestream?.is_live !== false;
-      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'} | livestream: ${JSON.stringify(channel?.livestream)?.substring(0, 50)}`);
+      
+      if (data?.livestream) {
+        isLive = data.livestream.is_live === true || data.livestream.is_live === 1;
+      } else if (data?.data?.livestream) {
+        isLive = data.data.livestream.is_live === true;
+      }
+      
+      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'} | status: ${data?.livestream?.is_live ?? 'no livestream field'}`);
 
       if (isLive && !wasLive) {
         wasLive = true;
