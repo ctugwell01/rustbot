@@ -41,6 +41,68 @@ const KICK = {
   scopes: ['user:read', 'channel:read', 'chat:write', 'events:subscribe'],
 };
 
+// Mod app — 5headnn account for banning
+const KICK_MOD = {
+  clientId: '01KNKY7E4FYYKG53FRSK3P28D0',
+  clientSecret: '7bc3d62980f363fd5af7644d016ef38ed11e2ac41da25dd62f3918068512b474',
+  redirectUri: 'https://rustbot-production.up.railway.app/mod-callback',
+  authUrl: 'https://id.kick.com/oauth/authorize',
+  tokenUrl: 'https://id.kick.com/oauth/token',
+  scopes: ['user:read', 'channel:read', 'events:subscribe', 'channel:write'],
+};
+
+let modTokens = null;
+const MOD_TOKEN_FILE = '/tmp/mod_tokens.json';
+
+function loadModTokens() {
+  if (process.env.SAVED_MOD_TOKENS) {
+    try { return JSON.parse(Buffer.from(process.env.SAVED_MOD_TOKENS, 'base64').toString()); } catch(e) {}
+  }
+  try {
+    if (require('fs').existsSync(MOD_TOKEN_FILE)) return JSON.parse(require('fs').readFileSync(MOD_TOKEN_FILE));
+  } catch(e) {}
+  return null;
+}
+
+async function saveModTokens(t) {
+  modTokens = t;
+  try { require('fs').writeFileSync(MOD_TOKEN_FILE, JSON.stringify(t)); } catch(e) {}
+  try {
+    await fetch('https://backboard.railway.app/graphql/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
+      body: JSON.stringify({
+        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_MOD_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
+      }),
+    });
+    console.log('💾 Mod tokens saved to Railway');
+  } catch(e) { console.error('Failed to save mod tokens:', e.message); }
+}
+
+async function getModToken() {
+  if (!modTokens) return null;
+  if (Date.now() > modTokens.expires_at - 60000) {
+    try {
+      const r = await fetch(KICK_MOD.tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          client_id: KICK_MOD.clientId,
+          client_secret: KICK_MOD.clientSecret,
+          refresh_token: modTokens.refresh_token,
+        }),
+      });
+      const data = await r.json();
+      if (data.access_token) {
+        await saveModTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
+        console.log('🔄 Mod tokens refreshed');
+      }
+    } catch(e) { console.error('Mod token refresh failed:', e.message); }
+  }
+  return modTokens?.access_token;
+}
+
 const TOKEN_FILE = '/tmp/tokens.json';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const app = express();
@@ -333,6 +395,25 @@ async function banUser(username, messageId = null) {
         body: { broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, permanent: true }
       },
     ];
+
+    // Try mod token first (5headnn account)
+    const modToken = await getModToken();
+    if (modToken) {
+      try {
+        const res = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${modToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ banned_user: { username }, permanent: true, reason: 'Spam detected by SheepSync' }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          console.log(`🔨 Banned via mod token: ${username}`);
+          return;
+        } else {
+          console.error('Mod token ban failed:', data);
+        }
+      } catch(e) { console.error('Mod ban error:', e.message); }
+    }
 
     let banned = false;
     for (const attempt of banAttempts) {
@@ -814,6 +895,50 @@ app.get('/', (req, res) => {
       </a>
     </body></html>`);
   }
+});
+
+app.get('/mod-auth', (req, res) => {
+  const codeVerifier = generateCodeVerifier();
+  const challenge = generateCodeChallenge(codeVerifier);
+  app.locals.modCodeVerifier = codeVerifier;
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: KICK_MOD.clientId,
+    redirect_uri: KICK_MOD.redirectUri,
+    scope: KICK_MOD.scopes.join(' '),
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state: 'sheepsync-mod',
+  });
+  res.redirect(`${KICK_MOD.authUrl}?${params}`);
+});
+
+app.get('/mod-callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.send('No code');
+  const codeVerifier = app.locals.modCodeVerifier;
+  if (!codeVerifier) return res.send('Session expired — go to /mod-auth again');
+  try {
+    const r = await fetch(KICK_MOD.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: KICK_MOD.clientId,
+        client_secret: KICK_MOD.clientSecret,
+        redirect_uri: KICK_MOD.redirectUri,
+        code_verifier: codeVerifier,
+        code,
+      }),
+    });
+    const data = await r.json();
+    if (data.access_token) {
+      await saveModTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
+      res.send('<html><body style="background:#0a0a0a;color:#53fc18;font-family:monospace;padding:40px;text-align:center"><h1>Mod Auth Complete!</h1><p>5headnn ban powers are now active. You can close this tab.</p></body></html>');
+    } else {
+      res.send('Mod auth failed: ' + JSON.stringify(data));
+    }
+  } catch(e) { res.send('Error: ' + e.message); }
 });
 
 app.get('/logout', (req, res) => {
