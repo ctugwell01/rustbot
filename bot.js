@@ -396,23 +396,32 @@ async function banUser(username, messageId = null) {
       },
     ];
 
-    // Try mod token first (5headnn account)
+    // Try mod token first (5headnn account) with multiple endpoint formats
     const modToken = await getModToken();
     if (modToken) {
-      try {
-        const res = await fetch(`https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${modToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ banned_user: { username }, permanent: true, reason: 'Spam detected by SheepSync' }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          console.log(`🔨 Banned via mod token: ${username}`);
-          return;
-        } else {
-          console.error('Mod token ban failed:', data);
-        }
-      } catch(e) { console.error('Mod ban error:', e.message); }
+      const modBanAttempts = [
+        { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: true, reason: 'Spam' } },
+        { url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`, body: { banned_user: { username }, permanent: true, reason: 'Spam' } },
+        { url: `https://api.kick.com/public/v1/channels/${CONFIG.chatroomId}/bans`, body: { banned_user: { username }, permanent: true } },
+        { url: `https://api.kick.com/public/v1/chatrooms/${CONFIG.chatroomId}/bans`, body: { username, permanent: true } },
+        { url: `https://api.kick.com/public/v1/moderation/channels/${CONFIG.broadcasterId}/bans`, body: { username, permanent: true } },
+      ];
+      for (const attempt of modBanAttempts) {
+        try {
+          const res = await fetch(attempt.url, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${modToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(attempt.body),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            console.log(`🔨 Banned via mod token: ${username} (${attempt.url})`);
+            return;
+          } else {
+            console.error(`Mod ban failed (${attempt.url}):`, JSON.stringify(data));
+          }
+        } catch(e) { console.error('Mod ban error:', e.message); }
+      }
     }
 
     let banned = false;
@@ -836,8 +845,8 @@ function connectToKick() {
       });
       const data = await res.json();
       const channel = data?.data?.[0] || data?.[0] || data;
-      const isLive = channel?.livestream?.is_live === true || channel?.is_live === true;
-      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'}`);
+      const isLive = channel?.livestream?.is_live === true || channel?.is_live === true || channel?.livestream !== null && channel?.livestream !== undefined;
+      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'} | data keys: ${Object.keys(data || {}).join(',')}`);
 
       if (isLive && !wasLive) {
         wasLive = true;
