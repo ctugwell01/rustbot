@@ -844,9 +844,10 @@ function connectToKick() {
         headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
       });
       const data = await res.json();
-      const channel = data?.data?.[0] || data?.[0] || data;
-      const isLive = channel?.livestream?.is_live === true || channel?.is_live === true || channel?.livestream !== null && channel?.livestream !== undefined;
-      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'} | data keys: ${Object.keys(data || {}).join(',')}`);
+      const channelList = data?.data || data;
+      const channel = Array.isArray(channelList) ? channelList[0] : channelList;
+      const isLive = channel?.livestream !== null && channel?.livestream !== undefined && channel?.livestream?.is_live !== false;
+      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'} | livestream: ${JSON.stringify(channel?.livestream)?.substring(0, 50)}`);
 
       if (isLive && !wasLive) {
         wasLive = true;
