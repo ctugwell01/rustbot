@@ -686,6 +686,18 @@ async function processMessage(data) {
       return;
     }
 
+    // !testsniper — test the Discord sniper alert
+    if (cmdLower === '!testsniper') {
+      if (username.toLowerCase() === '5headnn') {
+        try {
+          const discord = require('./discord');
+          if (discord.alertSniper) await discord.alertSniper('TestSniper123', 'what server you on bro imma snipe you');
+          await sendChatMessage('sniper alert sent to Discord, check #snipers');
+        } catch(e) { await sendChatMessage('test failed: ' + e.message); }
+      }
+      return;
+    }
+
     // !live — manual trigger for welcome message
     if (cmdLower === '!live') {
       const isOwner = username.toLowerCase() === '5headnn';
