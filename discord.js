@@ -175,13 +175,19 @@ client.once('ready', async () => {
     generalChannel = guild.channels.cache.find(c =>
       c.name.includes('general') && c.isTextBased()
     );
-    // Use live channel for stream announcements if it exists
     const liveChannel = guild.channels.cache.find(c =>
       c.name === 'live' && c.isTextBased()
     );
     if (liveChannel) {
       console.log(`📢 Live channel found: ${liveChannel.name}`);
       client.liveChannel = liveChannel;
+    }
+    const sniperChannel = guild.channels.cache.find(c =>
+      c.name === 'snipers' && c.isTextBased()
+    );
+    if (sniperChannel) {
+      console.log(`🎯 Sniper channel found: ${sniperChannel.name}`);
+      client.sniperChannel = sniperChannel;
     }
     console.log(`📢 General channel: ${generalChannel?.name}`);
   }
@@ -311,6 +317,24 @@ client.on('messageCreate', async (message) => {
 // ─────────────────────────────────────────
 //  EXPORT GO LIVE FUNCTION
 // ─────────────────────────────────────────
+async function alertSniper(username, message) {
+  if (!client.sniperChannel) return;
+  try {
+    const { EmbedBuilder } = require('discord.js');
+    const embed = new EmbedBuilder()
+      .setColor(0xFF0000)
+      .setTitle('🎯 Stream Sniper Detected!')
+      .addFields(
+        { name: 'Username', value: username, inline: true },
+        { name: 'Message', value: message.substring(0, 200), inline: false },
+      )
+      .setTimestamp()
+      .setFooter({ text: 'SheepSync Sniper Alert' });
+    await client.sniperChannel.send({ embeds: [embed] });
+    console.log(`🎯 Sniper alert sent to Discord: ${username}`);
+  } catch(e) { console.error('Sniper alert error:', e.message); }
+}
+
 async function announceGoLive() {
   if (!generalChannel || liveMessageSent) return;
   liveMessageSent = true;
