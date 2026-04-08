@@ -609,6 +609,11 @@ async function processMessage(data) {
     const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
     await sendChatMessage(roast, username);
     console.log(`🎯 Sniper detected: ${username}`);
+    // Alert Discord mods
+    try {
+      const discord = require('./discord');
+      if (discord.alertSniper) await discord.alertSniper(username, content);
+    } catch(e) {}
     return;
   }
 
