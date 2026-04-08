@@ -175,6 +175,13 @@ client.once('ready', async () => {
     generalChannel = guild.channels.cache.find(c =>
       c.name.includes('general') && c.isTextBased()
     );
+    const welcomeChannel = guild.channels.cache.find(c =>
+      c.name === 'welcome' && c.isTextBased()
+    );
+    if (welcomeChannel) {
+      client.welcomeChannel = welcomeChannel;
+      console.log(`👋 Welcome channel found: ${welcomeChannel.name}`);
+    }
     const liveChannel = guild.channels.cache.find(c =>
       c.name === 'live' && c.isTextBased()
     );
@@ -208,8 +215,9 @@ client.on('guildMemberAdd', async (member) => {
     console.error('Failed to assign member role:', e.message);
   }
 
-  // Welcome message
-  if (!generalChannel) return;
+  // Welcome message in welcome channel
+  const targetChannel = client.welcomeChannel || generalChannel;
+  if (!targetChannel) return;
   const welcomes = [
     `welcome to EvilSheep ${member} — grab a seat and try not to be a NN`,
     `${member} just joined the EvilSheep gang — welcome lad`,
@@ -217,7 +225,7 @@ client.on('guildMemberAdd', async (member) => {
     `${member} has entered the server — EvilSheep initiating... welcome mate`,
   ];
   const msg = welcomes[Math.floor(Math.random() * welcomes.length)];
-  await generalChannel.send(msg);
+  await targetChannel.send(msg);
   console.log(`👋 Welcomed: ${member.user.username}`);
 });
 
