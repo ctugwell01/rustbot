@@ -193,8 +193,22 @@ client.once('ready', async () => {
   }
 });
 
-// Welcome new members
+// Welcome new members and give them member role
 client.on('guildMemberAdd', async (member) => {
+  // Auto assign member role
+  try {
+    const memberRole = member.guild.roles.cache.find(r => r.name.toLowerCase() === 'member');
+    if (memberRole) {
+      await member.roles.add(memberRole);
+      console.log(`✅ Gave member role to: ${member.user.username}`);
+    } else {
+      console.log('⚠️ Member role not found — make sure it exists in Discord');
+    }
+  } catch(e) {
+    console.error('Failed to assign member role:', e.message);
+  }
+
+  // Welcome message
   if (!generalChannel) return;
   const welcomes = [
     `welcome to EvilSheep ${member} — grab a seat and try not to be a NN`,
