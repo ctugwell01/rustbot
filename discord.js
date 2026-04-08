@@ -196,6 +196,13 @@ client.once('ready', async () => {
       console.log(`🎯 Sniper channel found: ${sniperChannel.name}`);
       client.sniperChannel = sniperChannel;
     }
+    const tiktokChannel = guild.channels.cache.find(c =>
+      c.name === 'tiktok' && c.isTextBased()
+    );
+    if (tiktokChannel) {
+      console.log(`📱 TikTok channel found: ${tiktokChannel.name}`);
+      client.tiktokChannel = tiktokChannel;
+    }
     console.log(`📢 General channel: ${generalChannel?.name}`);
   }
 });
@@ -378,6 +385,51 @@ async function announceGoLive() {
   // Reset after stream
   setTimeout(() => { liveMessageSent = false; }, 8 * 60 * 60 * 1000);
 }
+
+// ─────────────────────────────────────────
+//  TIKTOK POLLING
+// ─────────────────────────────────────────
+let lastTikTokId = null;
+
+async function checkTikTok() {
+  if (!client.tiktokChannel) return;
+  try {
+    const res = await fetch('https://www.tiktok.com/api/post/item_list/?aid=1988&count=1&secUid=&uniqueId=5headnn&cursor=0&sourceType=8&appId=1233&region=GB&priority_region=&language=en', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      }
+    });
+    const data = await res.json();
+    const latest = data?.itemList?.[0];
+    if (!latest) return;
+
+    const videoId = latest.id;
+    if (lastTikTokId && videoId !== lastTikTokId) {
+      // New TikTok posted!
+      const desc = latest.desc || 'New TikTok!';
+      const url = `https://www.tiktok.com/@5headnn/video/${videoId}`;
+      const { EmbedBuilder } = require('discord.js');
+      const embed = new EmbedBuilder()
+        .setColor(0xFF0050)
+        .setTitle('5HeadNN posted a new TikTok!')
+        .setDescription(desc.substring(0, 200))
+        .addFields({ name: 'Watch it here', value: url })
+        .setTimestamp()
+        .setFooter({ text: 'SheepSync TikTok Alert' });
+      await client.tiktokChannel.send({ content: '@everyone new TikTok just dropped!', embeds: [embed] });
+      console.log(`📱 New TikTok posted: ${videoId}`);
+    }
+    lastTikTokId = videoId;
+  } catch(e) {
+    console.error('TikTok check error:', e.message);
+  }
+}
+
+// Check every 5 minutes
+setInterval(checkTikTok, 5 * 60 * 1000);
+// Initial check after 10 seconds
+setTimeout(checkTikTok, 10000);
 
 client.login(process.env.DISCORD_TOKEN);
 module.exports = { announceGoLive, alertSniper };
