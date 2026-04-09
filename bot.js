@@ -115,6 +115,51 @@ const greeted = new Set();
 const returning = new Set();
 let streamStartTime = null;
 
+// Raid detection
+const recentMessages = new Map(); // message content -> [{username, timestamp}]
+let raidMode = false;
+
+async function checkForRaid(username, content) {
+  const now = Date.now();
+  const key = content.toLowerCase().trim().substring(0, 50);
+  
+  if (!recentMessages.has(key)) recentMessages.set(key, []);
+  const msgs = recentMessages.get(key);
+  
+  // Add this message
+  msgs.push({ username, timestamp: now });
+  
+  // Clean old messages (older than 30 seconds)
+  const fresh = msgs.filter(m => now - m.timestamp < 30000);
+  recentMessages.set(key, fresh);
+  
+  // If 3+ different users sent the same message in 30 seconds = raid
+  const uniqueUsers = new Set(fresh.map(m => m.username));
+  if (uniqueUsers.size >= 3 && !raidMode) {
+    raidMode = true;
+    console.log('🚨 RAID DETECTED! Activating raid mode...');
+    
+    // Ban all raiders
+    for (const raider of uniqueUsers) {
+      await banUser(raider);
+    }
+    
+    // Warn chat
+    await sendChatMessage('raid detected — banning all involved. chat will return to normal shortly.');
+    
+    // Alert Discord
+    try {
+      const discord = require('./discord');
+      if (discord.alertSniper) await discord.alertSniper('RAID ALERT', `Coordinated raid detected! ${uniqueUsers.size} accounts sending: "${content.substring(0, 100)}"`);
+    } catch(e) {}
+    
+    // Reset raid mode after 2 minutes
+    setTimeout(() => { raidMode = false; recentMessages.clear(); }, 120000);
+    return true;
+  }
+  return false;
+}
+
 const AUTO_MESSAGES = [
   "if you're enjoying the stream smash that follow button, costs nothing and means everything",
   "new here? chuck a follow and join the EvilSheep gang, we dont bite... much",
@@ -616,6 +661,10 @@ async function processMessage(data) {
     } catch(e) {}
     return;
   }
+
+  // Raid detection — multiple users same message
+  const isRaid = await checkForRaid(username, content);
+  if (isRaid) return;
 
   // Spam / bot check — ban and roast immediately
   if (isSpam(content) || isSpamAdvanced(content)) {
