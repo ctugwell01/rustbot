@@ -885,13 +885,27 @@ function connectToKick() {
     console.log(`🎉 Sub event: ${username} (${months} months, gift: ${isGift})`);
   };
 
-  chatRoom.bind('App\\Events\\SubscriptionEvent', handleSubEvent);
-  chatRoom.bind('App\\Events\\GiftedSubscriptionsEvent', handleSubEvent);
-  chatRoom.bind('App\\Events\\UserSubscribed', handleSubEvent);
-  chatRoom.bind('App\\Events\\ChatMessageEvent', async (data) => {
-    // Detect sub messages from Kick system
-    if (data?.sender?.username === 'Kick' || data?.type === 'subscription') {
-      await handleSubEvent(data);
+  // Bind all possible sub event names Kick might use
+  const subEventNames = [
+    'App\\Events\\SubscriptionEvent',
+    'App\\Events\\GiftedSubscriptionsEvent', 
+    'App\\Events\\UserSubscribed',
+    'App\\Events\\ChatroomSubscriptionEvent',
+    'App\\Events\\SubscriptionCreated',
+    'App\\Events\\GiftSubscriptionEvent',
+  ];
+  
+  for (const eventName of subEventNames) {
+    chatRoom.bind(eventName, (data) => {
+      console.log(`🎉 Sub event fired: ${eventName}`, JSON.stringify(data).substring(0, 100));
+      handleSubEvent(data).catch(console.error);
+    });
+  }
+
+  // Also log ALL events so we can see what Kick actually sends
+  chatRoom.bind_global((eventName, data) => {
+    if (!eventName.includes('ChatMessage') && !eventName.includes('pusher')) {
+      console.log(`📡 Kick event: ${eventName} | ${JSON.stringify(data).substring(0, 80)}`);
     }
   });
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
@@ -913,17 +927,25 @@ function connectToKick() {
       
       // Try v1 channel endpoint
       const res = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
-        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        headers: { 
+          'Accept': 'application/json', 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://kick.com',
+        }
       });
       const data = await res.json();
       
-      if (data?.livestream) {
-        isLive = data.livestream.is_live === true || data.livestream.is_live === 1;
+      // When offline livestream is null, when live it has data
+      if (data?.livestream === null || data?.livestream === undefined) {
+        isLive = false;
+      } else if (data?.livestream) {
+        isLive = true;
       } else if (data?.data?.livestream) {
-        isLive = data.data.livestream.is_live === true;
+        isLive = true;
       }
       
-      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'} | status: ${data?.livestream?.is_live ?? 'no livestream field'}`);
+      // Only log status changes to reduce noise
+      if (isLive) console.log(`📡 Live check: LIVE`);
 
       if (isLive && !wasLive) {
         wasLive = true;
