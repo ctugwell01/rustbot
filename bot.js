@@ -488,7 +488,7 @@ async function banUser(username, messageId = null) {
       } catch(e) { console.error('Ban error:', e.message); }
     }
     
-    // Fallback: use streamer session token if available
+    // Fallback: use streamer session token
     if (!banned && process.env.KICK_AUTH_TOKEN) {
       try {
         const res = await fetch(`https://kick.com/api/v2/chatrooms/${CONFIG.chatroomId}/bans`, {
@@ -499,16 +499,17 @@ async function banUser(username, messageId = null) {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'Referer': 'https://kick.com',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent': 'Mozilla/5.0',
+            'Cookie': `session_token=${process.env.KICK_AUTH_TOKEN}; XSRF-TOKEN=${process.env.KICK_XSRF_TOKEN}`,
           },
           body: JSON.stringify({ banned_username: username, permanent: true, reason: 'Spam' }),
         });
-        const data = await res.json();
+        const text = await res.text();
         if (res.ok) {
           console.log(`🔨 Banned via session: ${username}`);
           banned = true;
         } else {
-          console.error('Session ban failed:', data);
+          console.error('Session ban failed:', res.status, text.substring(0, 100));
         }
       } catch(e) { console.error('Session ban error:', e.message); }
     }
@@ -1114,5 +1115,14 @@ app.listen(PORT, () => {
   } else {
     console.log('⚠️ No tokens — visit Railway URL to authorize');
   }
+
+  // Load mod tokens (5headnn ban powers)
+  modTokens = loadModTokens();
+  if (modTokens) {
+    console.log('✅ Mod tokens loaded — ban powers active!');
+  } else {
+    console.log('⚠️ No mod tokens — visit /mod-auth to authorize ban powers');
+  }
+
   connectToKick();
 });
