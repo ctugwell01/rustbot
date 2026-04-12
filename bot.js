@@ -110,6 +110,7 @@ app.use(express.json());
 
 let tokens = null;
 let codeVerifier = null;
+let lastRailwaySave = 0;
 const cooldowns = new Map();
 const greeted = new Set();
 const returning = new Set();
@@ -201,7 +202,11 @@ async function saveTokens(t) {
         query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
       }),
     });
-    console.log('💾 Tokens saved to Railway Variables');
+    // Only save to Railway every 2 hours to avoid rate limits
+    if (Date.now() - lastRailwaySave > 2 * 60 * 60 * 1000) {
+      lastRailwaySave = Date.now();
+      console.log('💾 Tokens saved to Railway Variables');
+    }
   } catch(e) {
     console.error('Failed to save to Railway:', e.message);
   }
@@ -223,8 +228,11 @@ function loadTokens() {
   return null;
 }
 
+let isRefreshing = false;
 async function refreshTokens() {
   if (!tokens?.refresh_token) return false;
+  if (isRefreshing) return false;
+  isRefreshing = true;
   try {
     const res = await fetch(KICK.tokenUrl, {
       method: 'POST',
@@ -243,11 +251,14 @@ async function refreshTokens() {
       return true;
     }
     console.error('❌ Refresh failed:', data);
+    isRefreshing = false;
     return false;
   } catch(e) {
     console.error('❌ Refresh error:', e.message);
+    isRefreshing = false;
     return false;
   }
+  isRefreshing = false;
 }
 
 async function getToken() {
@@ -903,10 +914,22 @@ function connectToKick() {
     });
   }
 
-  // Also log ALL events so we can see what Kick actually sends
+  // Log ALL chatroom events
   chatRoom.bind_global((eventName, data) => {
-    if (!eventName.includes('ChatMessage') && !eventName.includes('pusher')) {
-      console.log(`📡 Kick event: ${eventName} | ${JSON.stringify(data).substring(0, 80)}`);
+    if (!eventName.includes('pusher')) {
+      console.log(`📡 Chatroom event: ${eventName} | ${JSON.stringify(data).substring(0, 100)}`);
+    }
+  });
+
+  // Also subscribe to channel-level events (subs might come here)
+  const channelEvents = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
+  channelEvents.bind_global((eventName, data) => {
+    if (!eventName.includes('pusher')) {
+      console.log(`📡 Channel event: ${eventName} | ${JSON.stringify(data).substring(0, 100)}`);
+    }
+    // Handle sub events from channel level
+    if (eventName.includes('Subscription') || eventName.includes('subscription') || eventName.includes('Gift') || eventName.includes('gift')) {
+      handleSubEvent(data).catch(console.error);
     }
   });
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
@@ -1048,6 +1071,40 @@ app.get('/mod-callback', async (req, res) => {
       res.send('Mod auth failed: ' + JSON.stringify(data));
     }
   } catch(e) { res.send('Error: ' + e.message); }
+});
+
+// ─────────────────────────────────────────
+//  KICK WEBHOOK ENDPOINT
+// ─────────────────────────────────────────
+app.post('/webhook', express.json(), async (req, res) => {
+  res.status(200).send('OK'); // Always respond 200 first
+  
+  const event = req.body;
+  console.log('🔔 Webhook received:', JSON.stringify(event).substring(0, 200));
+  
+  const type = event?.type || event?.event;
+  
+  // Sub events
+  if (type === 'channel.subscription.new' || type === 'subscription.new' || 
+      type?.includes('subscri') || type?.includes('gifted')) {
+    const data = event?.data || event;
+    const username = data?.user?.username || data?.subscriber?.username || data?.username || 'Someone';
+    const isGift = data?.is_gift || type?.includes('gift') || false;
+    const gifter = data?.gifted_by?.username || data?.gifter?.username || null;
+    const months = data?.months_subscribed || data?.months || 1;
+    
+    console.log(`🎉 Sub webhook: ${username} (gift: ${isGift}, gifter: ${gifter})`);
+    
+    let msg = '';
+    if (isGift && gifter) {
+      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} as an official EvilSheep member. 2 sentences max.`);
+    } else if (months > 1) {
+      msg = await askClaude(`${username} just resubbed for ${months} months. Call them a big chad and loyal EvilSheep member. 2 sentences max.`);
+    } else {
+      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them as an official EvilSheep member. 2 sentences max.`);
+    }
+    if (msg) await sendChatMessage(msg);
+  }
 });
 
 app.get('/logout', (req, res) => {
