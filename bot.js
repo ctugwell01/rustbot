@@ -170,6 +170,7 @@ const AUTO_MESSAGES = [
   "use !predict to see if 5head wins his next fight, spoiler: the scripts decide",
   "enjoying the chaos? follow the channel and join the EvilSheep Discord: https://discord.gg/4DHRdH9dz5",
   "subs are big chads. NNs are NNs. the choice is yours lads",
+  () => `sub goal: ${subGoal.current}/${subGoal.target} — ${subGoal.target - subGoal.current} to go in ${subGoal.deadline}! become a big chad and help 5head hit it`,
 ];
 
 // ─────────────────────────────────────────
@@ -1026,7 +1027,8 @@ function connectToKick() {
     global.autoMessageStarted = true;
     setInterval(async () => {
       if (!streamStartTime) return; // Only when live
-      const msg = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
+      const msgOrFn = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
+      const msg = typeof msgOrFn === 'function' ? msgOrFn() : msgOrFn;
       await sendChatMessage(msg);
       console.log('📢 Auto message sent');
     }, 30 * 60 * 1000);
