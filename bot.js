@@ -1049,15 +1049,14 @@ function connectToKick() {
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
 
   // Auto message every 30 minutes — only start once
-  if (!global.autoMessageStarted) {
-    global.autoMessageStarted = true;
-    setInterval(async () => {
+  if (!global.autoMessageInterval) {
+    global.autoMessageInterval = setInterval(async () => {
       if (!streamStartTime) return; // Only when live
       const msgOrFn = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
       const msg = typeof msgOrFn === 'function' ? msgOrFn() : msgOrFn;
       await sendChatMessage(msg);
       console.log('📢 Auto message sent');
-    }, 30 * 60 * 1000);
+    }, 45 * 60 * 1000);
   }
 }
 
@@ -1209,19 +1208,9 @@ app.get('/callback', async (req, res) => {
     if (data.access_token) {
       saveTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
       codeVerifier = null;
-      // Trigger Railway redeploy so the new SAVED_TOKENS env var is loaded
-      try {
-        await fetch('https://backboard.railway.app/graphql/v2', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
-          body: JSON.stringify({ query: `mutation { serviceInstanceRedeploy(environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a") }` }),
-        });
-        console.log('🔄 Triggered redeploy to load new tokens');
-      } catch(e) { console.error('Redeploy trigger failed:', e.message); }
-
       res.send(`<html><body style="background:#0a0a0a;color:#e0d5c8;font-family:monospace;padding:40px;text-align:center">
         <h1 style="color:#53fc18">✅ SheepSync Authorized!</h1>
-        <p>Bot is restarting to load new tokens — will be active in ~30 seconds.</p>
+        <p>Bot will now post in chat. You can close this tab.</p>
         <p style="color:#7a7060">Tokens auto-refresh — never need to do this again!</p>
       </body></html>`);
     } else {
