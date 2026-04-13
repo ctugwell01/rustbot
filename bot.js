@@ -725,7 +725,16 @@ async function processMessage(data) {
 
   if (isMention) {
     const question = content.replace(/@sheepsyncbot/gi, '').replace(/@sheepsync/gi, '').trim();
-    const r = await askClaude(`${userStatus} viewer ${username} is talking to you (SheepSync the chatbot) directly and says: "${question}". You are a chatbot in the stream chat, not a player. Answer naturally as a chatbot would. If they are asking about stream snipers, Rust, 5HeadNN or anything stream related — answer in context of being a Kick stream chatbot.`);
+    
+    // Check for sub goal questions
+    if (/how many subs|sub goal|subs left|subs to go|sub count|how close|how far/i.test(question)) {
+      const remaining = subGoal.target - subGoal.current;
+      await sendChatMessage(`${subGoal.current}/${subGoal.target} subs — ${remaining} to go in ${subGoal.deadline}! sub up and become a big chad`, username);
+      setCD(username);
+      return;
+    }
+
+    const r = await askClaude(`${userStatus} viewer ${username} is talking to you (SheepSync the chatbot) directly and says: "${question}". You are a chatbot in the stream chat, not a player. Answer naturally as a chatbot would. If they are asking about stream snipers, Rust, 5HeadNN or anything stream related — answer in context of being a Kick stream chatbot. You know the sub goal is ${subGoal.current}/${subGoal.target} with ${subGoal.target - subGoal.current} to go.`);
     if (r) await sendChatMessage(r, username);
     setCD(username);
     return;
