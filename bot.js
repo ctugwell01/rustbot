@@ -623,8 +623,13 @@ async function askClaude(q) {
 function isCD(u) { const l = cooldowns.get(u); return l && Date.now() - l < CONFIG.cooldownSeconds * 1000; }
 function setCD(u) { cooldowns.set(u, Date.now()); }
 
+// Sub goal tracker (update manually when subs change)
+let subGoal = { current: 12, target: 43, deadline: '2 weeks' };
+
 const STATIC = {
   '!discord': 'https://discord.gg/4DHRdH9dz5',
+  '!goal': null, // handled dynamically
+  '!subs': null, // handled dynamically
   '!socials': 'Kick: kick.com/5headnn | Discord: https://discord.gg/4DHRdH9dz5',
   '!lurk': 'thanks for lurking me big W',
   '!cheat': 'https://evilsheep.io/',
@@ -740,6 +745,33 @@ async function processMessage(data) {
         await sendChatMessage(`/ban ${targetUser} banned by mod`);
         await sendChatMessage(`${targetUser} got the hammer 🔨`, username);
         console.log(`🔨 Manual ban: ${targetUser} by ${username}`);
+      }
+      return;
+    }
+
+    // !goal / !subs — show sub goal
+    if (cmdLower === '!goal' || cmdLower === '!subs') {
+      const remaining = subGoal.target - subGoal.current;
+      await sendChatMessage(`${subGoal.current}/${subGoal.target} subs — ${remaining} to go in ${subGoal.deadline}! sub to help 5head hit his goal, big chads only`);
+      return;
+    }
+
+    // !addsub — update sub count (streamer only)
+    if (cmdLower === '!addsub' && username.toLowerCase() === '5headnn') {
+      const num = parseInt(args) || 1;
+      subGoal.current = Math.min(subGoal.current + num, subGoal.target);
+      const remaining = subGoal.target - subGoal.current;
+      await sendChatMessage(`sub goal updated! ${subGoal.current}/${subGoal.target} — ${remaining} to go!`);
+      return;
+    }
+
+    // !setgoal — set new goal (streamer only)  
+    if (cmdLower === '!setgoal' && username.toLowerCase() === '5headnn') {
+      const parts = args.split('/');
+      if (parts.length === 2) {
+        subGoal.current = parseInt(parts[0]) || subGoal.current;
+        subGoal.target = parseInt(parts[1]) || subGoal.target;
+        await sendChatMessage(`sub goal set to ${subGoal.current}/${subGoal.target}!`);
       }
       return;
     }
@@ -891,6 +923,11 @@ function connectToKick() {
       msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them as an official EvilSheep member. High energy, 2 sentences max.`);
     }
     if (msg) await sendChatMessage(msg);
+    // Auto increment sub counter
+    if (!isGift || months === 1) {
+      subGoal.current = Math.min(subGoal.current + 1, subGoal.target);
+      console.log(`📊 Sub goal updated: ${subGoal.current}/${subGoal.target}`);
+    }
     console.log(`🎉 Sub event: ${username} (${months} months, gift: ${isGift})`);
   };
 
