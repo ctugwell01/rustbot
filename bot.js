@@ -1021,13 +1021,16 @@ function connectToKick() {
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
 
-  // Auto message every 30 minutes
-  setInterval(async () => {
-    if (!streamStartTime) return; // Only when live
-    const msg = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
-    await sendChatMessage(msg);
-    console.log('📢 Auto message sent');
-  }, 30 * 60 * 1000);
+  // Auto message every 30 minutes — only start once
+  if (!global.autoMessageStarted) {
+    global.autoMessageStarted = true;
+    setInterval(async () => {
+      if (!streamStartTime) return; // Only when live
+      const msg = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
+      await sendChatMessage(msg);
+      console.log('📢 Auto message sent');
+    }, 30 * 60 * 1000);
+  }
 }
 
 // ─────────────────────────────────────────
