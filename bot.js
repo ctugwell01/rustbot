@@ -419,13 +419,27 @@ function isSpam(text) {
 async function deleteMessage(messageId) {
   const token = await getToken();
   if (!token || !messageId) return;
-  try {
-    await fetch(`https://api.kick.com/public/v1/chat/${messageId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    console.log(`🗑️ Deleted message: ${messageId}`);
-  } catch(e) { console.error('Delete error:', e.message); }
+  
+  const endpoints = [
+    `https://api.kick.com/public/v1/chat/${messageId}`,
+    `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/messages/${messageId}`,
+    `https://api.kick.com/public/v1/chatrooms/${CONFIG.chatroomId}/messages/${messageId}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      });
+      if (res.ok || res.status === 204) {
+        console.log(`🗑️ Deleted message: ${messageId}`);
+        return;
+      }
+      const data = await res.text();
+      console.error(`Delete failed (${url}): ${res.status} ${data.substring(0, 80)}`);
+    } catch(e) { console.error('Delete error:', e.message); }
+  }
 }
 
 async function banUser(username, messageId = null) {
