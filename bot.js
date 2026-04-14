@@ -22,6 +22,78 @@ const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
 
+// ─────────────────────────────────────────
+//  MEMORY SYSTEM
+// ─────────────────────────────────────────
+const MEMORY_FILE = '/tmp/sheepsync_memory.json';
+let memory = {
+  chatters: {},      // username -> { vibes, jokes, lastSeen, subbed, times }
+  insideJokes: [],   // funny moments from stream
+  streamNotes: [],   // things that happened
+  lastUpdated: null,
+};
+
+function loadMemory() {
+  // Try env var first
+  if (process.env.SAVED_MEMORY) {
+    try {
+      memory = JSON.parse(Buffer.from(process.env.SAVED_MEMORY, 'base64').toString());
+      console.log(`🧠 Memory loaded — ${Object.keys(memory.chatters).length} chatters remembered`);
+      return;
+    } catch(e) {}
+  }
+  try {
+    if (fs.existsSync(MEMORY_FILE)) {
+      memory = JSON.parse(fs.readFileSync(MEMORY_FILE));
+      console.log(`🧠 Memory loaded from file`);
+    }
+  } catch(e) {}
+}
+
+async function saveMemory() {
+  try { fs.writeFileSync(MEMORY_FILE, JSON.stringify(memory)); } catch(e) {}
+  // Save to Railway Variables every 30 mins
+  if (Date.now() - (memory.lastSaved || 0) > 30 * 60 * 1000) {
+    memory.lastSaved = Date.now();
+    try {
+      await fetch('https://backboard.railway.app/graphql/v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
+        body: JSON.stringify({
+          query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_MEMORY", value: "${Buffer.from(JSON.stringify(memory)).toString('base64')}" }) }`,
+        }),
+      });
+      console.log('🧠 Memory saved to Railway');
+    } catch(e) {}
+  }
+}
+
+function updateChatterMemory(username, content, userStatus) {
+  if (!memory.chatters[username]) {
+    memory.chatters[username] = {
+      firstSeen: new Date().toISOString(),
+      messageCount: 0,
+      isVIP: false,
+      isSub: false,
+      notes: [],
+    };
+  }
+  const chatter = memory.chatters[username];
+  chatter.lastSeen = new Date().toISOString();
+  chatter.messageCount++;
+  chatter.isVIP = userStatus === '[VIP]' || userStatus === '[MOD]' || userStatus === '[OWNER]';
+  chatter.isSub = userStatus === '[SUB]' || userStatus === '[CHAD]';
+  
+  // Save memory periodically
+  if (chatter.messageCount % 10 === 0) saveMemory();
+}
+
+function getChatterContext(username) {
+  const chatter = memory.chatters[username];
+  if (!chatter || chatter.messageCount < 3) return '';
+  return `[Memory: ${username} has chatted ${chatter.messageCount} times, first seen ${chatter.firstSeen.split('T')[0]}${chatter.notes.length > 0 ? ', notes: ' + chatter.notes.slice(-2).join(', ') : ''}]`;
+}
+
 const CONFIG = {
   channelSlug: '5headnn',
   streamerName: '5HeadNN',
@@ -713,6 +785,10 @@ async function processMessage(data) {
 
   console.log(`💬 [${username}] ${userStatus}: ${content}`);
   const lower = content.toLowerCase();
+  
+  // Update chatter memory
+  updateChatterMemory(username, content, userStatus);
+  const chatterContext = getChatterContext(username);
 
   // Welcome back returning viewers (seen before but not this session)
   const userKey = username.toLowerCase();
@@ -748,7 +824,7 @@ async function processMessage(data) {
       return;
     }
 
-    const r = await askClaude(`${userStatus} viewer ${username} is talking to you (SheepSync the chatbot) directly and says: "${question}". You are a chatbot in the stream chat, not a player. Answer naturally as a chatbot would. If they are asking about stream snipers, Rust, 5HeadNN or anything stream related — answer in context of being a Kick stream chatbot. You know the sub goal is ${subGoal.current}/${subGoal.target} with ${subGoal.target - subGoal.current} to go.`);
+    const r = await askClaude(`${userStatus} viewer ${username} is talking to you directly and says: "${question}". ${chatterContext} You are SheepSync, a Welsh Valleys degen chatbot. Answer naturally. Sub goal: ${subGoal.current}/${subGoal.target} with ${subGoal.target - subGoal.current} to go.`);
     if (r) await sendChatMessage(r, username);
     setCD(username);
     return;
@@ -796,6 +872,32 @@ async function processMessage(data) {
         subGoal.current = parseInt(parts[0]) || subGoal.current;
         subGoal.target = parseInt(parts[1]) || subGoal.target;
         await sendChatMessage(`sub goal set to ${subGoal.current}/${subGoal.target}!`);
+      }
+      return;
+    }
+
+    // !note @user note — add a note about a chatter (streamer only)
+    if (cmdLower === '!note' && username.toLowerCase() === '5headnn') {
+      const parts = args.split(' ');
+      const target = parts[0].replace('@', '');
+      const note = parts.slice(1).join(' ');
+      if (target && note) {
+        if (!memory.chatters[target]) memory.chatters[target] = { messageCount: 0, notes: [], firstSeen: new Date().toISOString() };
+        memory.chatters[target].notes.push(note);
+        await saveMemory();
+        await sendChatMessage(`got it, remembered that about ${target}`);
+      }
+      return;
+    }
+
+    // !memory @user — show what bot knows about someone
+    if (cmdLower === '!memory' && username.toLowerCase() === '5headnn') {
+      const target = args.replace('@', '');
+      const chatter = memory.chatters[target];
+      if (chatter) {
+        await sendChatMessage(`${target}: ${chatter.messageCount} messages, first seen ${chatter.firstSeen?.split('T')[0]}, notes: ${chatter.notes.join(', ') || 'none'}`);
+      } else {
+        await sendChatMessage(`no memory of ${target} yet`);
       }
       return;
     }
@@ -1229,6 +1331,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log('🐑 SheepSync starting...');
   console.log(`✅ Channel: ${CONFIG.channelSlug} | Chatroom: ${CONFIG.chatroomId}`);
+  loadMemory();
   tokens = loadTokens();
   if (tokens) {
     console.log('✅ Tokens loaded from storage!');
