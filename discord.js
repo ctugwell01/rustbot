@@ -30,8 +30,69 @@ const client = new Client({
 const cooldowns = new Map();
 let generalChannel = null;
 let liveMessageSent = false;
-// Conversation history per channel (max 10 messages)
 const conversationHistory = new Map();
+
+// ─────────────────────────────────────────
+//  DISCORD MEMORY
+// ─────────────────────────────────────────
+const fs = require('fs');
+const DISCORD_MEMORY_FILE = '/tmp/discord_memory.json';
+let discordMemory = { members: {}, insideJokes: [], lastSaved: 0 };
+
+function loadDiscordMemory() {
+  if (process.env.SAVED_DISCORD_MEMORY) {
+    try {
+      discordMemory = JSON.parse(Buffer.from(process.env.SAVED_DISCORD_MEMORY, 'base64').toString());
+      console.log(`🧠 Discord memory loaded — ${Object.keys(discordMemory.members).length} members remembered`);
+      return;
+    } catch(e) {}
+  }
+  try {
+    if (fs.existsSync(DISCORD_MEMORY_FILE)) {
+      discordMemory = JSON.parse(fs.readFileSync(DISCORD_MEMORY_FILE));
+    }
+  } catch(e) {}
+}
+
+async function saveDiscordMemory() {
+  try { fs.writeFileSync(DISCORD_MEMORY_FILE, JSON.stringify(discordMemory)); } catch(e) {}
+  if (Date.now() - discordMemory.lastSaved > 30 * 60 * 1000) {
+    discordMemory.lastSaved = Date.now();
+    try {
+      await fetch('https://backboard.railway.app/graphql/v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
+        body: JSON.stringify({
+          query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_DISCORD_MEMORY", value: "${Buffer.from(JSON.stringify(discordMemory)).toString('base64')}" }) }`,
+        }),
+      });
+      console.log('🧠 Discord memory saved');
+    } catch(e) {}
+  }
+}
+
+function updateMemberMemory(userId, username, userStatus) {
+  if (!discordMemory.members[userId]) {
+    discordMemory.members[userId] = {
+      username,
+      firstSeen: new Date().toISOString(),
+      messageCount: 0,
+      notes: [],
+    };
+  }
+  const member = discordMemory.members[userId];
+  member.username = username;
+  member.lastSeen = new Date().toISOString();
+  member.messageCount++;
+  member.status = userStatus;
+  if (member.messageCount % 20 === 0) saveDiscordMemory();
+}
+
+function getMemberContext(userId) {
+  const member = discordMemory.members[userId];
+  if (!member || member.messageCount < 5) return '';
+  return `[Memory: ${member.username} has sent ${member.messageCount} Discord messages since ${member.firstSeen?.split('T')[0]}${member.notes.length > 0 ? ', notes: ' + member.notes.slice(-2).join(', ') : ''}]`;
+}
 
 function getHistory(channelId) {
   if (!conversationHistory.has(channelId)) conversationHistory.set(channelId, []);
@@ -168,6 +229,7 @@ const SPAM_PATTERNS = [
 // ─────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Discord bot ready as ${client.user.tag}`);
+  loadDiscordMemory();
 
   // Find channels
   const guild = client.guilds.cache.get(CONFIG.guildId);
@@ -245,6 +307,10 @@ client.on('messageCreate', async (message) => {
   const lower = content.toLowerCase();
   const member = message.member;
   const userStatus = getUserStatus(member);
+  
+  // Update member memory
+  updateMemberMemory(message.author.id, message.author.username, userStatus);
+  const memberContext = getMemberContext(message.author.id);
   const isPrivileged = userStatus !== '[NN]';
   const isMention = message.mentions.users.has(client.user.id);
   const isCmd = content.startsWith('!');
@@ -316,7 +382,7 @@ client.on('messageCreate', async (message) => {
     }
     question = question.trim();
     setCooldown(message.author.id);
-    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is asking you: "${question}". If they mention someone by name, talk about that person based on what you know.`, message.channel.id);
+    const r = await askClaude(`${userStatus} Discord member ${message.author.username} is asking you: "${question}". ${memberContext} If they mention someone by name, talk about that person based on what you know.`, message.channel.id);
     if (r) await message.reply(r);
     return;
   }
