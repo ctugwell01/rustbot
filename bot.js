@@ -361,7 +361,25 @@ async function sendChatMessage(message, replyTo = null) {
       console.log(`💬 Sent: ${trimmed}`);
     } else {
       console.error('❌ Send failed:', data);
-      if (res.status === 401) await refreshTokens();
+      if (res.status === 401) {
+        console.log('🔄 Token unauthorized — forcing refresh...');
+        tokens = null; // Clear bad token
+        const refreshed = await refreshTokens();
+        if (refreshed && tokens) {
+          // Retry the message once
+          try {
+            const retryRes = await fetch(`https://api.kick.com/public/v1/chat`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${tokens.access_token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), content: trimmed, type: 'user' }),
+            });
+            if (retryRes.ok) console.log(`💬 Sent (retry): ${trimmed}`);
+            else console.error('❌ Retry failed');
+          } catch(e) {}
+        } else {
+          console.log('⚠️ Token refresh failed — visit Railway URL to re-auth');
+        }
+      }
     }
   } catch(e) { console.error('❌ Send error:', e.message); }
 }
