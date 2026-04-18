@@ -455,6 +455,16 @@ const SPAM_PATTERNS = [
   /tg\s*:\s*@\w+/i,
   /\|\s*tg\s*:/i,
   /via\s+customizable/i,
+  /let\s+collab(orate)?/i,
+  /add\s+me\s+(up\s+)?on\s+discord/i,
+  /am\s+also\s+a\s+streamer/i,
+  /i.m\s+also\s+a\s+streamer/i,
+  /also\s+a\s+streamer/i,
+  /collab\s+together/i,
+  /collaborate\s+together/i,
+  /follow\s+for\s+follow/i,
+  /f4f/i,
+  /sub\s+for\s+sub/i,
 ];
 
 function normalizeText(text) {
