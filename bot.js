@@ -333,11 +333,15 @@ async function refreshTokens() {
 
 async function getToken() {
   if (!tokens) return null;
-  if (Date.now() > tokens.expires_at - 60000) await refreshTokens();
+  const timeLeft = tokens.expires_at - Date.now();
+  if (timeLeft < 300000) { // Refresh if less than 5 mins left
+    console.log(`⏱️ Token expires in ${Math.floor(timeLeft/60000)} mins — refreshing...`);
+    await refreshTokens();
+  }
   return tokens?.access_token;
 }
 
-setInterval(refreshTokens, 30 * 60 * 1000);
+setInterval(refreshTokens, 10 * 60 * 1000); // Refresh every 10 minutes
 
 // ─────────────────────────────────────────
 //  SEND MESSAGE
@@ -363,8 +367,9 @@ async function sendChatMessage(message, replyTo = null) {
       console.error('❌ Send failed:', data);
       if (res.status === 401) {
         console.log('🔄 Token unauthorized — forcing refresh...');
-        tokens = null; // Clear bad token
+        const oldTokens = tokens; // Keep old tokens for refresh
         const refreshed = await refreshTokens();
+        if (!refreshed) tokens = oldTokens; // Restore if refresh failed
         if (refreshed && tokens) {
           // Retry the message once
           try {
