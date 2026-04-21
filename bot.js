@@ -261,6 +261,10 @@ function generateCodeChallenge(verifier) {
 // ─────────────────────────────────────────
 async function saveTokens(t) {
   tokens = t;
+  // Always save refresh token separately so it never gets lost
+  if (t.refresh_token) {
+    try { fs.writeFileSync('/tmp/refresh_token.txt', t.refresh_token); } catch(e) {}
+  }
   // Save to file as backup
   try { fs.writeFileSync(TOKEN_FILE, JSON.stringify(t)); } catch(e) {}
   // Save to Railway Variables so they survive redeploys
@@ -294,6 +298,16 @@ function loadTokens() {
   // Fall back to file
   try {
     if (fs.existsSync(TOKEN_FILE)) return JSON.parse(fs.readFileSync(TOKEN_FILE));
+  } catch(e) {}
+  // Try backup refresh token
+  try {
+    if (fs.existsSync('/tmp/refresh_token.txt')) {
+      const refreshToken = fs.readFileSync('/tmp/refresh_token.txt', 'utf8').trim();
+      if (refreshToken) {
+        console.log('🔄 Found backup refresh token — attempting restore...');
+        return { refresh_token: refreshToken, expires_at: 0, access_token: null };
+      }
+    }
   } catch(e) {}
   return null;
 }
@@ -393,20 +407,16 @@ async function sendChatMessage(message, replyTo = null) {
 //  SPAM / BAN DETECTION
 // ─────────────────────────────────────────
 const SNIPER_PATTERNS = [
-  /what server/i,
-  /which server/i,
-  /what('?s| is) (the )?server/i,
-  /imma? (snipe|find|come|hunt)/i,
-  /i('?m| am) (gonna |going to )?(snipe|find|come|hunt)/i,
+  /imma? (snipe|find|come|hunt) (you|u|him)/i,
+  /i('?m| am) (gonna |going to )?(snipe|find|come|hunt) (you|u|him)/i,
   /stream snip/i,
-  /found (you|u|him)/i,
   /i found (you|u|him)/i,
   /coming for (you|u|him)/i,
-  /tell me (the )?server/i,
-  /drop (the )?server/i,
-  /server (name|ip|info)/i,
-  /what map/i,
+  /tell me (the )?server/i,
+  /drop (the )?server/i,
   /i('?m| am) on (the )?server/i,
+  /gonna snipe/i,
+  /going to snipe/i,
 ];
 
 const SNIPER_ROASTS = [
@@ -1136,6 +1146,26 @@ function connectToKick() {
   const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
   liveChannel.bind('App\\Events\\StreamerIsLive', () => handleGoLive());
   liveChannel.bind('App\\Events\\LivestreamUpdated', () => handleGoLive());
+
+  // Track subs via polling as backup
+  let lastSubCount = 0;
+  setInterval(async () => {
+    try {
+      const res = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://kick.com' }
+      });
+      const data = await res.json();
+      const currentSubs = data?.subscriber_badges?.length || data?.subscription_count || 0;
+      if (currentSubs > lastSubCount && lastSubCount > 0) {
+        const diff = currentSubs - lastSubCount;
+        console.log(`🎉 Sub count increased by ${diff} (via poll)`);
+        const msg = await askClaude(`${diff} new sub(s) just came in! Hype them up as big chads and EvilSheep members. Short and punchy.`);
+        if (msg) await sendChatMessage(msg);
+        subGoal.current = Math.min(subGoal.current + diff, subGoal.target);
+      }
+      if (currentSubs > 0) lastSubCount = currentSubs;
+    } catch(e) {}
+  }, 2 * 60 * 1000);
 
   // Poll Kick API every 60 seconds to detect going live
   let wasLive = false;
