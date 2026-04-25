@@ -357,6 +357,20 @@ async function getToken() {
 
 setInterval(refreshTokens, 10 * 60 * 1000); // Refresh every 10 minutes
 
+// Also reload tokens from Railway Variables every 5 minutes
+// This picks up any new tokens saved via re-auth without needing a restart
+setInterval(async () => {
+  if (!process.env.SAVED_TOKENS) return;
+  try {
+    const savedTokens = JSON.parse(Buffer.from(process.env.SAVED_TOKENS, 'base64').toString());
+    // Only update if saved tokens are newer/fresher than current
+    if (!tokens || savedTokens.expires_at > (tokens.expires_at || 0)) {
+      tokens = savedTokens;
+      console.log('🔄 Tokens reloaded from Railway Variables');
+    }
+  } catch(e) {}
+}, 5 * 60 * 1000);
+
 // ─────────────────────────────────────────
 //  SEND MESSAGE
 // ─────────────────────────────────────────
