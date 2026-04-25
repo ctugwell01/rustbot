@@ -260,13 +260,14 @@ function generateCodeChallenge(verifier) {
 //  TOKEN STORAGE
 // ─────────────────────────────────────────
 async function saveTokens(t) {
-  tokens = t;
-  // Always save refresh token separately so it never gets lost
+  tokens = { ...t, saved_at: Date.now() };
+  // Always save refresh token separately
   if (t.refresh_token) {
     try { fs.writeFileSync('/tmp/refresh_token.txt', t.refresh_token); } catch(e) {}
   }
-  // Save to file as backup
-  try { fs.writeFileSync(TOKEN_FILE, JSON.stringify(t)); } catch(e) {}
+  // Save to file
+  try { fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens)); } catch(e) {}
+  console.log(`✅ Tokens saved — expires in ${Math.floor((t.expires_at - Date.now())/60000)} mins`);
   // Save to Railway Variables so they survive redeploys
   try {
     await fetch(`https://backboard.railway.app/graphql/v2`, {
@@ -357,19 +358,15 @@ async function getToken() {
 
 setInterval(refreshTokens, 10 * 60 * 1000); // Refresh every 10 minutes
 
-// Also reload tokens from Railway Variables every 5 minutes
-// This picks up any new tokens saved via re-auth without needing a restart
+// Check token freshness every 2 minutes and auto-refresh if needed
 setInterval(async () => {
-  if (!process.env.SAVED_TOKENS) return;
-  try {
-    const savedTokens = JSON.parse(Buffer.from(process.env.SAVED_TOKENS, 'base64').toString());
-    // Only update if saved tokens are newer/fresher than current
-    if (!tokens || savedTokens.expires_at > (tokens.expires_at || 0)) {
-      tokens = savedTokens;
-      console.log('🔄 Tokens reloaded from Railway Variables');
-    }
-  } catch(e) {}
-}, 5 * 60 * 1000);
+  if (!tokens) return;
+  const timeLeft = tokens.expires_at - Date.now();
+  if (timeLeft < 10 * 60 * 1000) { // Less than 10 mins left
+    console.log(`⏱️ Token has ${Math.floor(timeLeft/60000)} mins left — refreshing...`);
+    await refreshTokens();
+  }
+}, 2 * 60 * 1000);
 
 // ─────────────────────────────────────────
 //  SEND MESSAGE
@@ -1363,6 +1360,12 @@ app.get('/status', (req, res) => {
     expires_at: tokens?.expires_at ? new Date(tokens.expires_at).toISOString() : null,
     expired: tokens ? Date.now() > tokens.expires_at : true,
   });
+});
+
+// Internal token endpoint — bot fetches this to get latest tokens
+app.get('/internal/tokens', (req, res) => {
+  if (tokens) res.json(tokens);
+  else res.status(404).json({ error: 'no tokens' });
 });
 
 app.get('/callback', async (req, res) => {
