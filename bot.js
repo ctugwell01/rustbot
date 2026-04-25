@@ -677,7 +677,14 @@ async function banUser(username, messageId = null) {
       } catch(e) { console.error('Session ban error:', e.message); }
     }
     
-    if (!banned) console.error(`❌ All ban attempts failed for ${username}`);
+    if (!banned) {
+      // Final fallback — send /ban as a chat command from the bot (works if bot is a mod)
+      try {
+        console.log(`⚡ Trying chat command fallback: /ban ${username}`);
+        await sendChatMessage(`/ban ${username}`);
+        console.log(`🔨 Sent /ban ${username} via chat command`);
+      } catch(e) { console.error('Chat ban fallback error:', e.message); }
+    }
   } catch(e) { console.error('Ban error:', e.message); }
 }
 
