@@ -1,5 +1,12 @@
 /**
- * SheepSync — AI Rust Chatbot for kick.com/5headnn
+ * SheepSync —
+  /remove\\s+space/i,
+  /keep\\s+(the\\s+)?chat\\s+alive/i,
+  /grow\\s+your\\s+audience/i,
+  /stream\\s+more\\s+active/i,
+  /help\\s+you\\s+grow/i,
+  /bots?\\s+keep/i,
+  /ai\\s+bots?\\s+(keep|help|grow)/i, AI Rust Chatbot for kick.com/5headnn
  * Kick OAuth 2.1 with PKCE
  */
 
@@ -493,6 +500,13 @@ const SPAM_PATTERNS = [
   /sub\s+for\s+sub/i,
 ];
 
+  /remove\\s+space/i,
+  /keep\\s+(the\\s+)?chat\\s+alive/i,
+  /grow\\s+your\\s+audience/i,
+  /stream\\s+more\\s+active/i,
+  /help\\s+you\\s+grow/i,
+  /bots?\\s+keep/i,
+  /ai\\s+bots?\\s+(keep|help|grow)/i,
 function normalizeText(text) {
   // Replace unicode lookalike characters with ASCII equivalents
   return text
@@ -665,6 +679,27 @@ async function banUser(username, messageId = null) {
     
     if (!banned) console.error(`❌ All ban attempts failed for ${username}`);
   } catch(e) { console.error('Ban error:', e.message); }
+}
+
+async function timeoutUser(username, duration = 600, reason = 'timed out') {
+  const modToken = await getModToken();
+  const token = await getToken();
+  const useToken = modToken || token;
+  if (!useToken) return;
+  const attempts = [
+    { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: false, duration, reason } },
+    { url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`, body: { banned_user: { username }, permanent: false, duration, reason } },
+  ];
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(attempt.body),
+      });
+      if (res.ok) { console.log(`⏱️ Timeout: ${username} for ${duration}s`); return; }
+    } catch(e) {}
+  }
 }
 
 const ROAST_RESPONSES = [
@@ -869,7 +904,28 @@ async function processMessage(data) {
 
   if (isMention) {
     const question = content.replace(/@sheepsyncbot/gi, '').replace(/@sheepsync/gi, '').trim();
-    
+
+    // ── MOD COMMANDS via @mention ──────────────────────────────
+    // Handle "remove @user" or "ban @user" BEFORE Claude sees it
+    const isModerator = isVIP || username.toLowerCase() === '5headnn';
+    const modCmdMatch = question.match(/^(remove|ban|timeout)\s+@?(\w+)(?:\s+(.+))?$/i);
+    if (modCmdMatch && isModerator) {
+      const action = modCmdMatch[1].toLowerCase();
+      const targetUser = modCmdMatch[2];
+      const reason = modCmdMatch[3] || 'removed by mod';
+      if (action === 'timeout') {
+        // Timeout for 10 minutes
+        await timeoutUser(targetUser, 600, reason);
+        await sendChatMessage(`${targetUser} timed out for 10 mins 🔇`, username);
+      } else {
+        await banUser(targetUser, null);
+        await sendChatMessage(`${targetUser} got the hammer 🔨`, username);
+      }
+      console.log(`🔨 Mod command: ${action} ${targetUser} by ${username}`);
+      return;
+    }
+    // ──────────────────────────────────────────────────────────
+
     // Check for sub goal questions
     if (/how many subs|sub goal|subs left|subs to go|sub count|how close|how far/i.test(question)) {
       const remaining = subGoal.target - subGoal.current;
@@ -1180,6 +1236,7 @@ function connectToKick() {
 
   // Poll Kick API every 60 seconds to detect going live
   let wasLive = false;
+  let firstCheck = true; // Skip announcement on restart if already live
   setInterval(async () => {
     try {
       // Try public API first
@@ -1210,13 +1267,19 @@ function connectToKick() {
 
       if (isLive && !wasLive) {
         wasLive = true;
-        console.log('🟢 5HeadNN is live (detected by poll)!');
-        await handleGoLive();
+        if (firstCheck) {
+          console.log('🟢 Already live on startup — skipping announcement');
+          streamStartTime = streamStartTime || Date.now();
+        } else {
+          console.log('🟢 5HeadNN is live (detected by poll)!');
+          await handleGoLive();
+        }
       } else if (!isLive && wasLive) {
         wasLive = false;
         streamStartTime = null;
         console.log('🔴 Stream ended');
       }
+      firstCheck = false;
     } catch(e) {
       console.error('Live check error:', e.message);
     }
