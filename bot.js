@@ -498,8 +498,6 @@ const SPAM_PATTERNS = [
   /follow\s+for\s+follow/i,
   /f4f/i,
   /sub\s+for\s+sub/i,
-];
-
   /remove\\s+space/i,
   /keep\\s+(the\\s+)?chat\\s+alive/i,
   /grow\\s+your\\s+audience/i,
@@ -507,6 +505,7 @@ const SPAM_PATTERNS = [
   /help\\s+you\\s+grow/i,
   /bots?\\s+keep/i,
   /ai\\s+bots?\\s+(keep|help|grow)/i,
+];
 
 function normalizeText(text) {
   // Replace unicode lookalike characters with ASCII equivalents
