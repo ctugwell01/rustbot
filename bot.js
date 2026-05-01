@@ -342,7 +342,8 @@ async function refreshTokens() {
       console.log('🔄 Tokens refreshed!');
       return true;
     }
-    console.error('❌ Refresh failed:', data);
+    console.error('❌ Refresh failed — clearing tokens, re-auth required:', data);
+    tokens = null;
     isRefreshing = false;
     return false;
   } catch(e) {
@@ -369,7 +370,17 @@ setInterval(refreshTokens, 10 * 60 * 1000); // Refresh every 10 minutes
 setInterval(async () => {
   if (!tokens) return;
   const timeLeft = tokens.expires_at - Date.now();
-  if (timeLeft < 10 * 60 * 1000) { // Less than 10 mins left
+  if (timeLeft < 0) {
+    // Token is already expired — try once then clear if it fails
+    console.log(`⚠️ Token expired ${Math.abs(Math.floor(timeLeft/60000))} mins ago — attempting refresh...`);
+    const ok = await refreshTokens();
+    if (!ok) {
+      console.log('⚠️ Refresh failed — clearing stale tokens. Re-auth at your Railway URL.');
+      tokens = null;
+    }
+    return;
+  }
+  if (timeLeft < 10 * 60 * 1000) {
     console.log(`⏱️ Token has ${Math.floor(timeLeft/60000)} mins left — refreshing...`);
     await refreshTokens();
   }
