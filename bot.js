@@ -1142,7 +1142,15 @@ async function processMessage(data) {
 // ─────────────────────────────────────────
 //  GO LIVE HANDLER
 // ─────────────────────────────────────────
+let goLiveFired = false;
+let goLiveTimeout = null;
+
 async function handleGoLive() {
+  if (goLiveFired) return; // Already announced, ignore duplicate triggers
+  goLiveFired = true;
+  // Reset after 10 minutes so it can fire again if stream restarts
+  clearTimeout(goLiveTimeout);
+  goLiveTimeout = setTimeout(() => { goLiveFired = false; }, 10 * 60 * 1000);
   streamStartTime = Date.now();
   console.log('🟢 Firing go live handler!');
   try { await announceGoLive(); } catch(e) { console.error('Discord announce error:', e.message); }
@@ -1295,6 +1303,7 @@ function connectToKick() {
       } else if (!isLive && wasLive) {
         wasLive = false;
         streamStartTime = null;
+        goLiveFired = false; // Reset so next go-live fires correctly
         console.log('🔴 Stream ended');
       }
       firstCheck = false;
