@@ -1234,11 +1234,8 @@ function connectToKick() {
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
 
-  // Welcome 5head when stream goes live
-  // Pusher live events (backup)
-  const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
-  liveChannel.bind('App\\Events\\StreamerIsLive', () => handleGoLive());
-  liveChannel.bind('App\\Events\\LivestreamUpdated', () => handleGoLive());
+  // Live detection handled by poll only (Pusher events fire too many duplicates)
+  pusher.subscribe(`channel.${CONFIG.channelSlug}`);
 
   // Track subs via polling as backup
   let lastSubCount = 0;
