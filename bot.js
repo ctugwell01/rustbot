@@ -1260,6 +1260,24 @@ function connectToKick() {
   // Poll Kick API every 60 seconds to detect going live
   let wasLive = false;
   let firstCheck = true; // Skip announcement on restart if already live
+
+  // Immediately check live status on startup to avoid false announcements
+  (async () => {
+    try {
+      const initRes = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://kick.com' }
+      });
+      const initData = await initRes.json();
+      const alreadyLive = !!(initData?.livestream || initData?.data?.livestream);
+      if (alreadyLive) {
+        wasLive = true;
+        streamStartTime = streamStartTime || Date.now();
+        console.log('🟢 Already live on startup — suppressing announcement');
+      }
+    } catch(e) { console.error('Startup live check error:', e.message); }
+    firstCheck = false;
+  })();
+
   setInterval(async () => {
     try {
       // Try public API first
