@@ -1264,11 +1264,20 @@ function connectToKick() {
   // Immediately check live status on startup to avoid false announcements
   (async () => {
     try {
-      const initRes = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
-        headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://kick.com' }
-      });
-      const initData = await initRes.json();
-      const alreadyLive = !!(initData?.livestream || initData?.data?.livestream);
+      // Try public API first, fall back to v1
+      let alreadyLive = false;
+      try {
+        const r1 = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+        });
+        const d1 = await r1.json();
+        alreadyLive = !!(d1?.data?.[0]?.stream);
+      } catch {
+        const r2 = await fetch(`https://kick.com/api/v2/channels/${CONFIG.channelSlug}/livestream`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://kick.com' }
+        });
+        if (r2.ok) { const d2 = await r2.json(); alreadyLive = !!(d2?.data || d2?.livestream); }
+      }
       if (alreadyLive) {
         wasLive = true;
         streamStartTime = streamStartTime || Date.now();
@@ -1285,22 +1294,24 @@ function connectToKick() {
       let isLive = false;
       
       // Try v1 channel endpoint
-      const res = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
-        headers: { 
-          'Accept': 'application/json', 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://kick.com',
+      // Try public API first, fall back to v2 livestream endpoint
+      let fetchOk = false;
+      try {
+        const r1 = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+        });
+        if (r1.ok) {
+          const d1 = await r1.json();
+          isLive = !!(d1?.data?.[0]?.stream);
+          fetchOk = true;
         }
-      });
-      const data = await res.json();
-      
-      // When offline livestream is null, when live it has data
-      if (data?.livestream === null || data?.livestream === undefined) {
-        isLive = false;
-      } else if (data?.livestream) {
-        isLive = true;
-      } else if (data?.data?.livestream) {
-        isLive = true;
+      } catch {}
+      if (!fetchOk) {
+        const r2 = await fetch(`https://kick.com/api/v2/channels/${CONFIG.channelSlug}/livestream`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://kick.com' }
+        });
+        if (r2.ok) { const d2 = await r2.json(); isLive = !!(d2?.data || d2?.livestream); }
+        else isLive = false;
       }
       
       // Only log status changes to reduce noise
