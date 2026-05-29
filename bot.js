@@ -1241,8 +1241,16 @@ function connectToKick() {
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
 
-  // Live detection handled by poll only (Pusher events fire too many duplicates)
-  pusher.subscribe(`channel.${CONFIG.channelSlug}`);
+  // Live detection via Pusher with debounce to prevent duplicates
+  const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
+  let goLiveDebounce = null;
+  const triggerGoLive = () => {
+    clearTimeout(goLiveDebounce);
+    goLiveDebounce = setTimeout(() => {
+      if (!goLiveFired) handleGoLive().catch(console.error);
+    }, 3000); // Wait 3s to absorb duplicate events
+  };
+  liveChannel.bind('App\\Events\\StreamerIsLive', triggerGoLive);
 
   // Track subs via polling as backup
   let lastSubCount = 0;
