@@ -1289,33 +1289,36 @@ function connectToKick() {
 
   setInterval(async () => {
     try {
-      // Try public API first
-      // Try multiple endpoints to find livestream status
       let isLive = false;
-      
-      // Try v1 channel endpoint
-      // Try public API first, fall back to v2 livestream endpoint
       let fetchOk = false;
-      try {
-        const r1 = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
-          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
-        });
-        if (r1.ok) {
-          const d1 = await r1.json();
-          isLive = !!(d1?.data?.[0]?.stream);
-          fetchOk = true;
-        }
-      } catch {}
-      if (!fetchOk) {
-        const r2 = await fetch(`https://kick.com/api/v2/channels/${CONFIG.channelSlug}/livestream`, {
-          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://kick.com' }
-        });
-        if (r2.ok) { const d2 = await r2.json(); isLive = !!(d2?.data || d2?.livestream); }
-        else isLive = false;
+
+      // Method 1: authenticated request (most reliable)
+      const tok = await getToken();
+      if (tok) {
+        try {
+          const r = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
+            headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${tok}` }
+          });
+          if (r.ok) {
+            const d = await r.json();
+            isLive = !!(d?.data?.[0]?.stream);
+            fetchOk = true;
+          } else { console.log(`📡 Auth live check returned ${r.status}`); }
+        } catch(e) { console.log('📡 Auth live check error:', e.message); }
       }
-      
-      // Only log status changes to reduce noise
-      if (isLive) console.log(`📡 Live check: LIVE`);
+
+      // Method 2: unauthenticated public API fallback
+      if (!fetchOk) {
+        try {
+          const r2 = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
+            headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+          });
+          if (r2.ok) { const d2 = await r2.json(); isLive = !!(d2?.data?.[0]?.stream); fetchOk = true; }
+        } catch(e) { console.log('📡 Unauth live check error:', e.message); }
+      }
+
+      if (!fetchOk) { console.log('📡 Live check: all methods failed'); return; }
+      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'}`);
 
       if (isLive && !wasLive) {
         wasLive = true;
