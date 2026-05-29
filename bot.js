@@ -993,6 +993,13 @@ async function processMessage(data) {
       return;
     }
 
+    // !golive — manually trigger live announcement (streamer only)
+    if (cmdLower === '!golive' && username.toLowerCase() === '5headnn') {
+      goLiveFired = false; // Reset lock so it fires
+      await handleGoLive();
+      return;
+    }
+
     // !setgoal — set new goal (streamer only)  
     if (cmdLower === '!setgoal' && username.toLowerCase() === '5headnn') {
       const parts = args.split('/');
