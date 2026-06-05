@@ -1237,6 +1237,21 @@ function connectToKick() {
     if (eventName.includes('Subscription') || eventName.includes('subscription') || eventName.includes('Gift') || eventName.includes('gift')) {
       handleSubEvent(data).catch(console.error);
     }
+    // Handle follow events
+    if (eventName.includes('Follow') || eventName.includes('follow')) {
+      const followerName = data?.user?.username || data?.username || data?.followed_by || 'someone';
+      console.log(`💜 New follower: ${followerName}`);
+      const followResponses = [
+        `@${followerName} welcome to the EvilSheep gang! 🐑 you're one of us now`,
+        `@${followerName} just followed — smart move lad, pull up a chair`,
+        `@${followerName} has joined the EvilSheep gang 🐑 stand sprayers only from here`,
+        `@${followerName} welcome in! don't ask about the monitor refresh rate`,
+        `@${followerName} followed — another one lost to the most sus Rust channel on Kick`,
+        `oi oi @${followerName} welcome to the gang, grab some spray cans on the way in 🐑`,
+      ];
+      const msg = followResponses[Math.floor(Math.random() * followResponses.length)];
+      sendChatMessage(msg).catch(console.error);
+    }
   });
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
