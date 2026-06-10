@@ -249,7 +249,7 @@ const AUTO_MESSAGES = [
   "use !predict to see if 5head wins his next fight, spoiler: the scripts decide",
   "enjoying the chaos? follow the channel and join the EvilSheep Discord: https://discord.gg/4DHRdH9dz5",
   "subs are big chads. NNs are NNs. the choice is yours lads",
-  () => `sub goal: ${subGoal.current}/${subGoal.target} — ${subGoal.target - subGoal.current} to go in ${subGoal.deadline}! become a big chad and help 5head hit it`,
+  () => `tip goal: £${subGoal.current}/£${subGoal.target} raised — help 5HeadNN buy his mum an AC unit before summer! donate with !donate 🐑`,
 ];
 
 // ─────────────────────────────────────────
@@ -818,10 +818,11 @@ function isCD(u) { const l = cooldowns.get(u); return l && Date.now() - l < CONF
 function setCD(u) { cooldowns.set(u, Date.now()); }
 
 // Sub goal tracker (update manually when subs change)
-let subGoal = { current: 12, target: 43, deadline: '2 weeks' };
+let subGoal = { current: 0, target: 1550, deadline: 'before summer', label: 'tip goal' };
 
 const STATIC = {
   '!discord': 'https://discord.gg/4DHRdH9dz5',
+  '!donate': '💰 Support 5HeadNN: https://www.paypal.com/ncp/payment/R4PRT9PY4UU3C — every donation helps keep the stand spray flowing!',
   '!goal': null, // handled dynamically
   '!subs': null, // handled dynamically
   '!socials': 'Kick: kick.com/5headnn | Discord: https://discord.gg/4DHRdH9dz5',
@@ -832,7 +833,7 @@ const STATIC = {
   '!evilsheep': 'Check out EvilSheep: https://evilsheep.io/',
   '!combatarena': 'Best Rust minigame server in the US — Combat Arena built by Kris himself. Go check it out!',
   '!clip': 'To clip the stream hit the scissors icon below the stream or press C on keyboard — share your clips in Discord!',
-  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict',
+  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict !donate',
 };
 
 // ─────────────────────────────────────────
@@ -947,7 +948,7 @@ async function processMessage(data) {
     // Check for sub goal questions
     if (/how many subs|sub goal|subs left|subs to go|sub count|how close|how far/i.test(question)) {
       const remaining = subGoal.target - subGoal.current;
-      await sendChatMessage(`${subGoal.current}/${subGoal.target} subs — ${remaining} to go in ${subGoal.deadline}! sub up and become a big chad`, username);
+      await sendChatMessage(`tip goal: £${subGoal.current}/£${subGoal.target} raised — helping 5HeadNN get his mum an AC unit before summer! use !donate to chip in 💰`, username);
       setCD(username);
       return;
     }
@@ -980,7 +981,7 @@ async function processMessage(data) {
     // !goal / !subs — show sub goal
     if (cmdLower === '!goal' || cmdLower === '!subs') {
       const remaining = subGoal.target - subGoal.current;
-      await sendChatMessage(`${subGoal.current}/${subGoal.target} subs — ${remaining} to go in ${subGoal.deadline}! sub to help 5head hit his goal, big chads only`);
+      await sendChatMessage(`tip goal: £${subGoal.current}/£${subGoal.target} raised — helping 5HeadNN get his mum an AC unit before summer! use !donate to chip in 💰`);
       return;
     }
 
