@@ -1261,10 +1261,11 @@ function connectToKick() {
   const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
   let goLiveDebounce = null;
   const triggerGoLive = () => {
+    if (goLiveFired) return;
     clearTimeout(goLiveDebounce);
     goLiveDebounce = setTimeout(() => {
       if (!goLiveFired) handleGoLive().catch(console.error);
-    }, 3000); // Wait 3s to absorb duplicate events
+    }, 5000);
   };
   liveChannel.bind('App\\Events\\StreamerIsLive', triggerGoLive);
 
@@ -1288,89 +1289,8 @@ function connectToKick() {
     } catch(e) {}
   }, 2 * 60 * 1000);
 
-  // Poll Kick API every 60 seconds to detect going live
-  let wasLive = false;
-  let firstCheck = true; // Skip announcement on restart if already live
-
-  // Immediately check live status on startup to avoid false announcements
-  (async () => {
-    try {
-      // Try public API first, fall back to v1
-      let alreadyLive = false;
-      try {
-        const r1 = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
-          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
-        });
-        const d1 = await r1.json();
-        alreadyLive = !!(d1?.data?.[0]?.stream);
-      } catch {
-        const r2 = await fetch(`https://kick.com/api/v2/channels/${CONFIG.channelSlug}/livestream`, {
-          headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://kick.com' }
-        });
-        if (r2.ok) { const d2 = await r2.json(); alreadyLive = !!(d2?.data || d2?.livestream); }
-      }
-      if (alreadyLive) {
-        wasLive = true;
-        streamStartTime = streamStartTime || Date.now();
-        console.log('🟢 Already live on startup — suppressing announcement');
-      }
-    } catch(e) { console.error('Startup live check error:', e.message); }
-    firstCheck = false;
-  })();
-
-  setInterval(async () => {
-    try {
-      let isLive = false;
-      let fetchOk = false;
-
-      // Method 1: authenticated request (most reliable)
-      const tok = await getToken();
-      if (tok) {
-        try {
-          const r = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
-            headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${tok}` }
-          });
-          if (r.ok) {
-            const d = await r.json();
-            isLive = !!(d?.data?.[0]?.stream);
-            fetchOk = true;
-          } else { console.log(`📡 Auth live check returned ${r.status}`); }
-        } catch(e) { console.log('📡 Auth live check error:', e.message); }
-      }
-
-      // Method 2: unauthenticated public API fallback
-      if (!fetchOk) {
-        try {
-          const r2 = await fetch(`https://api.kick.com/public/v1/channels?broadcaster_user_login=${CONFIG.channelSlug}`, {
-            headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' }
-          });
-          if (r2.ok) { const d2 = await r2.json(); isLive = !!(d2?.data?.[0]?.stream); fetchOk = true; }
-        } catch(e) { console.log('📡 Unauth live check error:', e.message); }
-      }
-
-      if (!fetchOk) { console.log('📡 Live check: all methods failed'); return; }
-      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'}`);
-
-      if (isLive && !wasLive) {
-        wasLive = true;
-        if (firstCheck) {
-          console.log('🟢 Already live on startup — skipping announcement');
-          streamStartTime = streamStartTime || Date.now();
-        } else {
-          console.log('🟢 5HeadNN is live (detected by poll)!');
-          await handleGoLive();
-        }
-      } else if (!isLive && wasLive) {
-        wasLive = false;
-        streamStartTime = null;
-        goLiveFired = false; // Reset so next go-live fires correctly
-        console.log('🔴 Stream ended');
-      }
-      firstCheck = false;
-    } catch(e) {
-      console.error('Live check error:', e.message);
-    }
-  }, 60000);
+  // Live detection via Pusher only (API blocked on Railway free tier)
+  // Use !golive in chat to manually trigger, or Pusher fires automatically when going live
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
 
