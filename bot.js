@@ -822,7 +822,7 @@ let subGoal = { current: 0, target: 1550, deadline: 'before summer', label: 'tip
 
 const STATIC = {
   '!discord': 'https://discord.gg/4DHRdH9dz5',
-  '!donate': '💰 Support 5HeadNN: https://www.paypal.com/ncp/payment/R4PRT9PY4UU3C — every donation helps keep the stand spray flowing!',
+  '!donate': '💰 Support 5HeadNN: https://streamlabs.com/5headnn1/tip — every donation helps keep the stand spray flowing!',
   '!goal': null, // handled dynamically
   '!subs': null, // handled dynamically
   '!socials': 'Kick: kick.com/5headnn | Discord: https://discord.gg/4DHRdH9dz5',
