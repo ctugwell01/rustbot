@@ -340,6 +340,7 @@ async function refreshTokens() {
     if (data.access_token) {
       saveTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
       console.log('🔄 Tokens refreshed!');
+      isRefreshing = false;
       return true;
     }
     console.error('❌ Refresh failed — clearing tokens, re-auth required:', data);
@@ -351,7 +352,6 @@ async function refreshTokens() {
     isRefreshing = false;
     return false;
   }
-  isRefreshing = false;
 }
 
 async function getToken() {
