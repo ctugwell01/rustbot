@@ -460,11 +460,11 @@ const SNIPER_ROASTS = [
 const SPAM_PATTERNS = [
   /n[\s\W]*e[\s\W]*z[\s\W]*h[\s\W]*n[\s\W]*a/i,
   /\w+[\s\W]*\.[\s\W]*c[\s\W]*o[\s\W]*m/i,
-  /discord\s*[;:.]?\s*\w+#?\d*/i,
+  /discord\.gg\/[a-zA-Z0-9]+/i,        // actual discord invite links only
   /add me on discord/i,
   /become your (dedicated|loyal) fan/i,
-  /support you.*discord/i,
-  /discord.*support/i,
+  /support.*your.*discord/i,
+  /grow.*discord/i,
   /follow me/i,
   /check out my (channel|stream|profile)/i,
   /(onlyfans|cashapp|paypal\.me)/i,
@@ -500,7 +500,7 @@ const SPAM_PATTERNS = [
   /\|\s*tg\s*:/i,
   /via\s+customizable/i,
   /let\s+collab(orate)?/i,
-  /add\s+me\s+(up\s+)?on\s+discord/i,
+  /join\s+my\s+discord/i,
   /am\s+also\s+a\s+streamer/i,
   /i.m\s+also\s+a\s+streamer/i,
   /also\s+a\s+streamer/i,
