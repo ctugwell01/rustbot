@@ -839,8 +839,11 @@ const STATIC = {
 // ─────────────────────────────────────────
 //  PROCESS MESSAGE
 // ─────────────────────────────────────────
+let lastChatActivity = Date.now();
+
 async function processMessage(data) {
   const username = data.sender?.username || '';
+  lastChatActivity = Date.now();
   const content = data.content || '';
   // Ignore own messages and protected bot accounts
   const IGNORED_BOTS = ['sheepsyncbot', 'sheepsync', 'botrix', 'streamelements', 'nightbot', 'moobot'];
