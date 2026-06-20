@@ -818,7 +818,7 @@ function isCD(u) { const l = cooldowns.get(u); return l && Date.now() - l < CONF
 function setCD(u) { cooldowns.set(u, Date.now()); }
 
 // Sub goal tracker (update manually when subs change)
-let subGoal = { current: 0, target: 1550, deadline: 'before summer', label: 'tip goal' };
+let subGoal = { current: 38.76, target: 1550, deadline: 'before summer', label: 'tip goal' };
 
 const STATIC = {
   '!discord': 'https://discord.gg/4DHRdH9dz5',
@@ -1004,14 +1004,16 @@ async function processMessage(data) {
       return;
     }
 
-    // !setgoal — set new goal (streamer only)  
+    // !setgoal — set tip goal (streamer only). Usage: !setgoal 38.76  OR  !setgoal 38.76/1550
     if (cmdLower === '!setgoal' && username.toLowerCase() === '5headnn') {
       const parts = args.split('/');
+      const newCurrent = parseFloat(parts[0]);
+      if (!isNaN(newCurrent)) subGoal.current = newCurrent;
       if (parts.length === 2) {
-        subGoal.current = parseInt(parts[0]) || subGoal.current;
-        subGoal.target = parseInt(parts[1]) || subGoal.target;
-        await sendChatMessage(`sub goal set to ${subGoal.current}/${subGoal.target}!`);
+        const newTarget = parseFloat(parts[1]);
+        if (!isNaN(newTarget)) subGoal.target = newTarget;
       }
+      await sendChatMessage(`tip goal updated: £${subGoal.current}/£${subGoal.target}!`);
       return;
     }
 
@@ -1297,15 +1299,22 @@ function connectToKick() {
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
 
-  // Auto message every 30 minutes — only start once
+  // Auto message every 60 minutes — only when live, chat active, no immediate repeats
+  let lastAutoMsgIndex = -1;
   if (!global.autoMessageInterval) {
     global.autoMessageInterval = setInterval(async () => {
       if (!streamStartTime) return; // Only when live
-      const msgOrFn = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
+      const timeSinceChat = Date.now() - lastChatActivity;
+      if (timeSinceChat > 10 * 60 * 1000) { console.log('📢 Auto message skipped — chat quiet'); return; }
+      let idx;
+      do { idx = Math.floor(Math.random() * AUTO_MESSAGES.length); }
+      while (idx === lastAutoMsgIndex && AUTO_MESSAGES.length > 1);
+      lastAutoMsgIndex = idx;
+      const msgOrFn = AUTO_MESSAGES[idx];
       const msg = typeof msgOrFn === 'function' ? msgOrFn() : msgOrFn;
       await sendChatMessage(msg);
       console.log('📢 Auto message sent');
-    }, 45 * 60 * 1000);
+    }, 60 * 60 * 1000);
   }
 }
 
