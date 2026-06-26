@@ -1194,11 +1194,11 @@ function connectToKick() {
 
     let msg = '';
     if (isGift && gifter) {
-      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} as an official EvilSheep member. Make it hype and fun. 2 sentences max.`);
+      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). Make it hype and fun. 2 sentences max.`);
     } else if (months > 1) {
       msg = await askClaude(`${username} just resubbed for ${months} months. Call them a big chad and remind them they are a loyal EvilSheep member. 2 sentences max.`);
     } else {
-      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them as an official EvilSheep member. High energy, 2 sentences max.`);
+      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). High energy, 2 sentences max.`);
     }
     if (msg) await sendChatMessage(msg);
     // Auto increment sub counter
@@ -1286,7 +1286,7 @@ function connectToKick() {
       if (currentSubs > lastSubCount && lastSubCount > 0) {
         const diff = currentSubs - lastSubCount;
         console.log(`🎉 Sub count increased by ${diff} (via poll)`);
-        const msg = await askClaude(`${diff} new sub(s) just came in! Hype them up as big chads and EvilSheep members. Short and punchy.`);
+        const msg = await askClaude(`${diff} new sub(s) just came in! Hype them up as big chads and EVILSHEEP members (spelled E-V-I-L-S-H-E-E-P). Short and punchy.`);
         if (msg) await sendChatMessage(msg);
         subGoal.current = Math.min(subGoal.current + diff, subGoal.target);
       }
@@ -1419,11 +1419,11 @@ app.post('/webhook', express.json(), async (req, res) => {
     
     let msg = '';
     if (isGift && gifter) {
-      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} as an official EvilSheep member. 2 sentences max.`);
+      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`);
     } else if (months > 1) {
       msg = await askClaude(`${username} just resubbed for ${months} months. Call them a big chad and loyal EvilSheep member. 2 sentences max.`);
     } else {
-      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them as an official EvilSheep member. 2 sentences max.`);
+      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`);
     }
     if (msg) await sendChatMessage(msg);
   }
