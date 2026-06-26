@@ -315,8 +315,9 @@ client.on('messageCreate', async (message) => {
   const isMention = message.mentions.users.has(client.user.id);
   const isCmd = content.startsWith('!');
 
-  // Spam detection
-  if (SPAM_PATTERNS.some(p => p.test(content))) {
+  // Spam detection — skip for mods and owner
+  const isMod = userStatus === '[MOD]' || userStatus === '[OWNER]';
+  if (!isMod && SPAM_PATTERNS.some(p => p.test(content))) {
     try {
       await message.delete();
       await message.channel.send(`${message.author} spam detected — get out of here NN`);
@@ -326,7 +327,6 @@ client.on('messageCreate', async (message) => {
   }
 
   // Link filter for NNs only — mods, boosters, VIPs can post links
-  const isMod = userStatus === '[MOD]' || userStatus === '[OWNER]';
   const hasLink = /https?:\/\/|www\./i.test(content);
   if (hasLink && !isPrivileged && !isMod && !isMention) {
     try {
