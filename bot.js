@@ -1204,7 +1204,7 @@ function connectToKick() {
       const msg = await askClaude(`${gifterName} just gifted ${quantity} subs to the community — absolute MEGA CHAD energy! Hype them up massively, welcome the new EvilSheep members (spelled E-V-I-L-S-H-E-E-P). Make it huge, 2-3 sentences max.`);
       if (msg) await sendChatMessage(msg);
       subGoal.current = Math.min(subGoal.current + quantity, subGoal.target);
-      if (discord.notifySub) discord.notifySub(`${gifterName} (x${quantity} gift bomb)`, months, true).catch(console.error);
+      try { const d = require('./discord'); if (d.notifySub) d.notifySub(`${gifterName} (x${quantity} gift bomb)`, months, true).catch(console.error); } catch(e) {}
       return;
     }
 
@@ -1223,7 +1223,7 @@ function connectToKick() {
       console.log(`📊 Sub goal updated: ${subGoal.current}/${subGoal.target}`);
     }
     console.log(`🎉 Sub event: ${username} (${months} months, gift: ${isGift})`);
-    if (discord.notifySub) discord.notifySub(username, months, isGift).catch(console.error);
+    try { const d = require('./discord'); if (d.notifySub) d.notifySub(username, months, isGift).catch(console.error); } catch(e) {}
   };
 
   // Bind all possible sub event names Kick might use
