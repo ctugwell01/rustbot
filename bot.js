@@ -593,109 +593,64 @@ async function deleteMessage(messageId) {
   }
 }
 
-async function banUser(username, messageId = null) {
-  const token = await getToken();
-  if (!token) return;
-  // Delete their message first
+async function lookupUserId(username, token) {
+  // Look up numeric user ID from username — required by new ban API
+  try {
+    const res = await fetch(`https://api.kick.com/public/v1/users?username=${encodeURIComponent(username)}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const userId = data?.data?.[0]?.id || data?.data?.id;
+      if (userId) { console.log(`🔍 Resolved ${username} → user_id ${userId}`); return userId; }
+    }
+  } catch(e) { console.error('User lookup error:', e.message); }
+  return null;
+}
+
+async function banUser(username, messageId = null, reason = 'Spam') {
   if (messageId) await deleteMessage(messageId);
   try {
-    // Try all known Kick ban endpoint formats
-    const banAttempts = [
-      {
-        url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`,
-        body: { banned_user: { username }, permanent: true, reason: 'Spam' }
-      },
-      {
-        url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`,
-        body: { banned_user: { username }, permanent: true, reason: 'Spam' }
-      },
-      {
-        url: `https://api.kick.com/public/v1/moderation/bans`,
-        body: { broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, permanent: true }
-      },
-    ];
-
-    // Try mod token first (5headnn account) with multiple endpoint formats
     const modToken = await getModToken();
-    if (modToken) {
-      const modBanAttempts = [
-        { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: true, reason: 'Spam' } },
-        { url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`, body: { banned_user: { username }, permanent: true, reason: 'Spam' } },
-        { url: `https://api.kick.com/public/v1/channels/${CONFIG.chatroomId}/bans`, body: { banned_user: { username }, permanent: true } },
-        { url: `https://api.kick.com/public/v1/chatrooms/${CONFIG.chatroomId}/bans`, body: { username, permanent: true } },
-        { url: `https://api.kick.com/public/v1/moderation/channels/${CONFIG.broadcasterId}/bans`, body: { username, permanent: true } },
-      ];
-      for (const attempt of modBanAttempts) {
-        try {
-          const res = await fetch(attempt.url, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${modToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(attempt.body),
-          });
-          const data = await res.json();
-          if (res.ok) {
-            console.log(`🔨 Banned via mod token: ${username} (${attempt.url})`);
-            return;
-          } else {
-            console.error(`Mod ban failed (${attempt.url}):`, JSON.stringify(data));
-          }
-        } catch(e) { console.error('Mod ban error:', e.message); }
-      }
+    const token = await getToken();
+    const useToken = modToken || token;
+    if (!useToken) { console.error('No token available for ban'); return; }
+
+    // Look up numeric user_id — required by the working ban endpoint
+    const userId = await lookupUserId(username, useToken);
+
+    // Primary: correct endpoint with numeric user_id (documented working endpoint)
+    if (userId) {
+      try {
+        const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), user_id: userId, reason }),
+        });
+        const data = await res.json();
+        if (res.ok) { console.log(`🔨 Banned ${username} (user_id: ${userId}) via moderation API`); return; }
+        else { console.error('Moderation API ban failed:', JSON.stringify(data)); }
+      } catch(e) { console.error('Moderation API error:', e.message); }
     }
 
+    // Fallback: try with username directly
+    const fallbacks = [
+      { url: 'https://api.kick.com/public/v1/moderation/bans', body: { broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, reason } },
+      { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: true, reason } },
+    ];
     let banned = false;
-    for (const attempt of banAttempts) {
+    for (const attempt of fallbacks) {
       try {
         const res = await fetch(attempt.url, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(attempt.body),
         });
-        const data = await res.json();
-        if (res.ok) {
-          console.log(`🔨 Banned: ${username} via ${attempt.url}`);
-          banned = true;
-          break;
-        } else {
-          console.error(`Ban failed (${attempt.url}):`, data);
-        }
-      } catch(e) { console.error('Ban error:', e.message); }
+        if (res.ok) { console.log(`🔨 Banned ${username} via ${attempt.url}`); banned = true; break; }
+        else { const d = await res.json(); console.error(`Ban fallback failed (${attempt.url}):`, JSON.stringify(d)); }
+      } catch(e) { console.error('Ban fallback error:', e.message); }
     }
-    
-    // Fallback: use streamer session token
-    if (!banned && process.env.KICK_AUTH_TOKEN) {
-      try {
-        const res = await fetch(`https://kick.com/api/v2/chatrooms/${CONFIG.chatroomId}/bans`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.KICK_AUTH_TOKEN}`,
-            'X-XSRF-TOKEN': process.env.KICK_XSRF_TOKEN || '',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Referer': 'https://kick.com',
-            'User-Agent': 'Mozilla/5.0',
-            'Cookie': `session_token=${process.env.KICK_AUTH_TOKEN}; XSRF-TOKEN=${process.env.KICK_XSRF_TOKEN}`,
-          },
-          body: JSON.stringify({ banned_username: username, permanent: true, reason: 'Spam' }),
-        });
-        const text = await res.text();
-        if (res.ok) {
-          console.log(`🔨 Banned via session: ${username}`);
-          banned = true;
-        } else {
-          console.error('Session ban failed:', res.status, text.substring(0, 100));
-        }
-      } catch(e) { console.error('Session ban error:', e.message); }
-    }
-    
-    if (!banned) {
-      // Final fallback — send /ban as a chat command from the bot (works if bot is a mod)
-      try {
-        console.log(`⚡ Trying chat command fallback: /ban ${username}`);
-        await sendChatMessage(`/ban ${username}`);
-        console.log(`🔨 Sent /ban ${username} via chat command`);
-      } catch(e) { console.error('Chat ban fallback error:', e.message); }
-    }
+    if (!banned) console.error(`❌ All ban attempts failed for ${username}`);
   } catch(e) { console.error('Ban error:', e.message); }
 }
 
@@ -704,20 +659,28 @@ async function timeoutUser(username, duration = 600, reason = 'timed out') {
   const token = await getToken();
   const useToken = modToken || token;
   if (!useToken) return;
-  const attempts = [
-    { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: false, duration, reason } },
-    { url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`, body: { banned_user: { username }, permanent: false, duration, reason } },
-  ];
-  for (const attempt of attempts) {
-    try {
-      const res = await fetch(attempt.url, {
+  // Convert seconds to minutes for Kick API (max 10080 mins = 7 days)
+  const durationMins = Math.min(Math.ceil(duration / 60), 10080);
+  const userId = await lookupUserId(username, useToken);
+  try {
+    if (userId) {
+      const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(attempt.body),
+        headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), user_id: userId, duration: durationMins, reason }),
       });
-      if (res.ok) { console.log(`⏱️ Timeout: ${username} for ${duration}s`); return; }
-    } catch(e) {}
-  }
+      if (res.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); return; }
+      else { const d = await res.json(); console.error('Timeout failed:', JSON.stringify(d)); }
+    }
+    // Fallback without user_id
+    const res2 = await fetch('https://api.kick.com/public/v1/moderation/bans', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, duration: durationMins, reason }),
+    });
+    if (res2.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); }
+    else { const d = await res2.json(); console.error('Timeout fallback failed:', JSON.stringify(d)); }
+  } catch(e) { console.error('Timeout error:', e.message); }
 }
 
 const ROAST_RESPONSES = [
@@ -832,7 +795,6 @@ const STATIC = {
   '!drops': 'Drops begin on 11/13 make sure to visit https://kick.facepunch.com/ and follow the directions to get your free Rust skin!',
   '!evilsheep': 'Check out EvilSheep: https://evilsheep.io/',
   '!combatarena': 'Best Rust minigame server in the US — Combat Arena built by Kris himself. Go check it out!',
-  '!clip': 'To clip the stream hit the scissors icon below the stream or press C on keyboard — share your clips in Discord!',
   '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict !donate',
 };
 
@@ -871,6 +833,21 @@ async function processMessage(data) {
       const discord = require('./discord');
       if (discord.alertSniper) await discord.alertSniper(username, content);
     } catch(e) {}
+    return;
+  }
+
+  // Incoming raid detection via chat system message
+  const raidMatch = content.match(/^(.+?)\s+is raiding with\s+(\d+)/i) ||
+                    content.match(/^(.+?)\s+raided\s+(?:the channel\s+)?with\s+(\d+)/i) ||
+                    content.match(/^(.+?)\s+has raided/i);
+  if (raidMatch && (sender?.is_staff || sender?.role === 'moderator' || username.toLowerCase() === 'kick')) {
+    const raiderName = raidMatch[1].trim();
+    const viewerCount = raidMatch[2] || '';
+    console.log(`🎉 Raid detected in chat from: ${raiderName}`);
+    const raidMsg = viewerCount
+      ? `OI OI massive shoutout to @${raiderName} for the raid with ${viewerCount} viewers — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`
+      : `OI OI massive shoutout to @${raiderName} for the raid — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`;
+    await sendChatMessage(raidMsg);
     return;
   }
 
@@ -1119,6 +1096,33 @@ async function processMessage(data) {
       return;
     }
 
+    // !clip — fetch latest Kick clip dynamically
+    if (cmdLower === '!clip') {
+      try {
+        const tok = await getToken();
+        const headers = tok
+          ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
+          : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
+        const res = await fetch(`https://api.kick.com/public/v1/clips?broadcaster_user_login=${CONFIG.channelSlug}&first=1`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const clip = data?.data?.[0];
+          if (clip) {
+            const clipUrl = clip.clip_url || clip.url || `https://kick.com/${CONFIG.channelSlug}?clip=${clip.id}`;
+            const clipTitle = clip.title || 'Latest clip';
+            await sendChatMessage(`🎬 Latest clip: "${clipTitle}" — ${clipUrl}`, username);
+          } else {
+            await sendChatMessage(`🎬 No clips yet — press C while watching to clip!`, username);
+          }
+        } else {
+          await sendChatMessage(`🎬 Press C while watching or hit the scissors icon to clip!`, username);
+        }
+      } catch(e) {
+        await sendChatMessage(`🎬 Press C while watching or hit the scissors icon to clip!`, username);
+      }
+      return;
+    }
+
     if (STATIC[cmdLower]) { await sendChatMessage(STATIC[cmdLower], username); return; }
     setCD(username);
     const r = await askClaude(`${userStatus} viewer ${username} asked: ${args ? `${cmd} ${args}` : cmd}`);
@@ -1190,7 +1194,19 @@ function connectToKick() {
     const username = data.username || data.user?.username || 'Someone';
     const months = data.months || 1;
     const isGift = data.is_gift || false;
-    const gifter = data.gifter_username || null;
+    const gifter = data.gifter_username || data.gifted_by?.username || null;
+
+    // Gift bomb — someone gifted multiple subs at once
+    const quantity = data.quantity || data.gifted_quantity || data.number_of_gifts || 0;
+    if (quantity > 1) {
+      const gifterName = username; // For gift bombs, username IS the gifter
+      console.log(`🎁 Gift bomb: ${gifterName} gifted ${quantity} subs!`);
+      const msg = await askClaude(`${gifterName} just gifted ${quantity} subs to the community — absolute MEGA CHAD energy! Hype them up massively, welcome the new EvilSheep members (spelled E-V-I-L-S-H-E-E-P). Make it huge, 2-3 sentences max.`);
+      if (msg) await sendChatMessage(msg);
+      subGoal.current = Math.min(subGoal.current + quantity, subGoal.target);
+      if (discord.notifySub) discord.notifySub(`${gifterName} (x${quantity} gift bomb)`, months, true).catch(console.error);
+      return;
+    }
 
     let msg = '';
     if (isGift && gifter) {
@@ -1207,6 +1223,7 @@ function connectToKick() {
       console.log(`📊 Sub goal updated: ${subGoal.current}/${subGoal.target}`);
     }
     console.log(`🎉 Sub event: ${username} (${months} months, gift: ${isGift})`);
+    if (discord.notifySub) discord.notifySub(username, months, isGift).catch(console.error);
   };
 
   // Bind all possible sub event names Kick might use
@@ -1243,6 +1260,17 @@ function connectToKick() {
     if (eventName.includes('Subscription') || eventName.includes('subscription') || eventName.includes('Gift') || eventName.includes('gift')) {
       handleSubEvent(data).catch(console.error);
     }
+    // Handle incoming raid events
+    if (eventName.includes('Raid') || eventName.includes('raid') || eventName.includes('Host') || eventName.includes('host')) {
+      const raiderName = data?.host_username || data?.raider?.username || data?.from_channel || data?.username || 'someone';
+      const viewerCount = data?.viewers || data?.viewer_count || data?.number || '';
+      console.log(`🎉 Incoming raid from: ${raiderName} with ${viewerCount} viewers`);
+      const raidMsg = viewerCount
+        ? `OI OI massive shoutout to @${raiderName} for the raid with ${viewerCount} viewers — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`
+        : `OI OI massive shoutout to @${raiderName} for the raid — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`;
+      sendChatMessage(raidMsg).catch(console.error);
+    }
+
     // Handle follow events
     if (eventName.includes('Follow') || eventName.includes('follow')) {
       const followerName = data?.user?.username || data?.username || data?.followed_by || 'someone';
