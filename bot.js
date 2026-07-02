@@ -1563,6 +1563,84 @@ app.post('/webhook', express.json(), async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────
+//  KICK WEBHOOKS
+// ─────────────────────────────────────────
+const WEBHOOK_URL = 'https://rustbot-production.up.railway.app/kick-webhook';
+
+async function subscribeToWebhooks(token) {
+  const events = [
+    'channel.subscription.new',
+    'channel.subscription.gifts',
+    'channel.followed',
+    'livestream.status.updated',
+  ];
+  try {
+    const res = await fetch('https://api.kick.com/public/v1/events/subscriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ events: events.map(type => ({ name: type, version: 1 })), method: 'webhook', condition: { broadcaster_user_id: parseInt(CONFIG.broadcasterId) }, transport: { method: 'webhook', callback: WEBHOOK_URL } }),
+    });
+    const data = await res.json();
+    if (res.ok) { console.log('✅ Webhook subscriptions registered:', events.join(', ')); }
+    else { console.error('❌ Webhook subscribe failed:', JSON.stringify(data)); }
+  } catch(e) { console.error('Webhook subscribe error:', e.message); }
+}
+
+app.post('/kick-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  res.status(200).send('OK'); // Respond immediately so Kick doesn't retry
+  try {
+    const eventType = req.headers['kick-event-type'];
+    const body = JSON.parse(req.body.toString());
+    console.log(`🔔 Webhook: ${eventType}`);
+
+    if (eventType === 'channel.subscription.new') {
+      const username = body.subscriber?.username || 'Someone';
+      const months = body.duration || 1;
+      console.log(`🎉 Webhook sub: ${username} (${months} months)`);
+      subGoal.current = Math.min(subGoal.current + 1, subGoal.target);
+      let msg = months > 1
+        ? await askClaude(`${username} just resubbed for ${months} months. Big chad, loyal EvilSheep member (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`)
+        : await askClaude(`${username} just subscribed for the first time! Big chad, welcome to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`);
+      if (msg) await sendChatMessage(msg);
+      try { const d = require('./discord'); if (d.notifySub) d.notifySub(username, months, false).catch(console.error); } catch(e) {}
+    }
+
+    else if (eventType === 'channel.subscription.gifts') {
+      const gifter = body.gifter?.is_anonymous ? 'An anonymous gifter' : (body.gifter?.username || 'Someone');
+      const quantity = body.giftees?.length || 1;
+      console.log(`🎁 Webhook gift bomb: ${gifter} gifted ${quantity} subs`);
+      subGoal.current = Math.min(subGoal.current + quantity, subGoal.target);
+      const msg = await askClaude(`${gifter} just gifted ${quantity} subs — MEGA CHAD energy! Hype them massively, welcome new EvilSheep members (spelled E-V-I-L-S-H-E-E-P). 2-3 sentences max.`);
+      if (msg) await sendChatMessage(msg);
+      try { const d = require('./discord'); if (d.notifySub) d.notifySub(`${gifter} (x${quantity} gift bomb)`, 1, true).catch(console.error); } catch(e) {}
+    }
+
+    else if (eventType === 'channel.followed') {
+      const follower = body.follower?.username || 'Someone';
+      console.log(`💜 Webhook follow: ${follower}`);
+      const followResponses = [
+        `@${follower} welcome to the EvilSheep gang! 🐑 you're one of us now`,
+        `@${follower} just followed — smart move lad, pull up a chair`,
+        `@${follower} has joined the EvilSheep gang 🐑 stand sprayers only from here`,
+        `@${follower} welcome in! don't ask about the monitor refresh rate`,
+        `oi oi @${follower} welcome to the gang, grab some spray cans on the way in 🐑`,
+      ];
+      const msg = followResponses[Math.floor(Math.random() * followResponses.length)];
+      await sendChatMessage(msg);
+      try { const d = require('./discord'); if (d.notifyFollow) d.notifyFollow(follower).catch(console.error); } catch(e) {}
+    }
+
+    else if (eventType === 'livestream.status.updated') {
+      const isLive = body.is_live;
+      console.log(`📡 Webhook live status: ${isLive ? 'LIVE' : 'offline'}`);
+      if (isLive && !goLiveFired) handleGoLive().catch(console.error);
+      else if (!isLive) { streamStartTime = null; goLiveFired = false; }
+    }
+
+  } catch(e) { console.error('Webhook handler error:', e.message); }
+});
+
 app.get('/logout', (req, res) => {
   tokens = null;
   try { require('fs').unlinkSync(TOKEN_FILE); } catch(e) {}
@@ -1606,6 +1684,7 @@ app.get('/callback', async (req, res) => {
     if (data.access_token) {
       saveTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
       codeVerifier = null;
+      subscribeToWebhooks(data.access_token).catch(console.error);
       res.send(`<html><body style="background:#0a0a0a;color:#e0d5c8;font-family:monospace;padding:40px;text-align:center">
         <h1 style="color:#53fc18">✅ SheepSync Authorized!</h1>
         <p>Bot will now post in chat. You can close this tab.</p>
