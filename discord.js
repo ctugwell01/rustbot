@@ -256,6 +256,11 @@ client.once('ready', async () => {
     );
     if (client.clipsChannel) console.log(`🎬 Clips channel found: ${client.clipsChannel.name}`);
 
+    client.subsChannel = guild.channels.cache.find(c =>
+      c.name === 'subs' && c.isTextBased()
+    );
+    if (client.subsChannel) console.log(`⭐ Subs channel found: ${client.subsChannel.name}`);
+
     const sniperChannel = guild.channels.cache.find(c =>
       c.name === 'snipers' && c.isTextBased()
     );
@@ -517,7 +522,7 @@ async function notifyFollow(username) {
 }
 
 async function notifySub(username, months, gifted) {
-  const target = client.liveChannel || generalChannel;
+  const target = client.subsChannel || client.liveChannel || generalChannel;
   if (!target) return;
   try {
     const isGift = gifted ? ' (gifted)' : '';
