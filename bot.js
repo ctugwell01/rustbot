@@ -346,6 +346,12 @@ async function refreshTokens() {
     console.error('❌ Refresh failed — clearing tokens, re-auth required:', data);
     tokens = null;
     isRefreshing = false;
+    // Notify via Discord so you don't need to check Railway URL
+    try {
+      const d = require('./discord');
+      const authLink = `https://rustbot-production.up.railway.app`;
+      if (d.notifyOwner) d.notifyOwner(`⚠️ SheepSync needs re-auth! Kick tokens expired.\nClick to re-authorize: ${authLink}`).catch(()=>{});
+    } catch(e) {}
     return false;
   } catch(e) {
     console.error('❌ Refresh error:', e.message);
@@ -802,6 +808,8 @@ const STATIC = {
 //  PROCESS MESSAGE
 // ─────────────────────────────────────────
 let lastChatActivity = Date.now();
+let lastPusherActivity = Date.now();
+let watchdogActive = false;
 
 async function processMessage(data) {
   const username = data.sender?.username || '';
@@ -1103,7 +1111,7 @@ async function processMessage(data) {
         const headers = tok
           ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
           : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
-        const res = await fetch(`https://api.kick.com/public/v1/clips?broadcaster_user_login=${CONFIG.channelSlug}&first=1`, { headers });
+        const res = await fetch(`https://api.kick.com/public/v1/clips?broadcaster_user_login=${CONFIG.channelSlug}&sort=view_count&first=1`, { headers });
         if (res.ok) {
           const data = await res.json();
           const clip = data?.data?.[0];
@@ -1245,6 +1253,7 @@ function connectToKick() {
 
   // Log ALL chatroom events
   chatRoom.bind_global((eventName, data) => {
+    lastPusherActivity = Date.now(); // Watchdog: track Pusher activity
     if (!eventName.includes('pusher')) {
       console.log(`📡 Chatroom event: ${eventName} | ${JSON.stringify(data).substring(0, 100)}`);
     }
@@ -1322,8 +1331,56 @@ function connectToKick() {
     } catch(e) {}
   }, 2 * 60 * 1000);
 
-  // Live detection via Pusher only (API blocked on Railway free tier)
-  // Use !golive in chat to manually trigger, or Pusher fires automatically when going live
+  // Watchdog — if Pusher goes silent for 10 mins, reconnect
+  if (!watchdogActive) {
+    watchdogActive = true;
+    setInterval(async () => {
+      const silentFor = Date.now() - lastPusherActivity;
+      if (silentFor > 10 * 60 * 1000) {
+        console.log('⚠️ Watchdog: Pusher silent for 10+ mins — reconnecting...');
+        lastPusherActivity = Date.now(); // Reset so we don't spam reconnects
+        try {
+          pusher.disconnect();
+          await new Promise(r => setTimeout(r, 3000));
+          pusher.connect();
+          console.log('🔄 Pusher reconnected by watchdog');
+        } catch(e) { console.error('Watchdog reconnect error:', e.message); }
+      }
+    }, 5 * 60 * 1000); // Check every 5 mins
+  }
+
+  // Live detection via Pusher + poll backup with correct Kick API endpoint
+  // Use !golive in chat to manually trigger if needed
+  let wasLive = false;
+  let firstCheck = true;
+  setInterval(async () => {
+    try {
+      const tok = await getToken();
+      const headers = tok
+        ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
+        : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
+      const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${CONFIG.channelSlug}`, { headers });
+      if (!res.ok) { console.log(`📡 Live check returned ${res.status}`); return; }
+      const data = await res.json();
+      const isLive = !!(data?.data?.[0]?.stream?.is_live || data?.data?.[0]?.stream);
+      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'}`);
+      if (isLive && !wasLive) {
+        wasLive = true;
+        if (firstCheck) {
+          console.log('🟢 Already live on startup — suppressing announcement');
+          streamStartTime = streamStartTime || Date.now();
+        } else {
+          if (!goLiveFired) handleGoLive().catch(console.error);
+        }
+      } else if (!isLive && wasLive) {
+        wasLive = false;
+        streamStartTime = null;
+        goLiveFired = false;
+        console.log('🔴 Stream ended');
+      }
+      firstCheck = false;
+    } catch(e) { console.log('📡 Live check error:', e.message); }
+  }, 60 * 1000);
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
 
