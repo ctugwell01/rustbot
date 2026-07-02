@@ -633,6 +633,9 @@ async function banUser(username, messageId = null, reason = 'Spam') {
       { banned_user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
       { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
       { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), permanent: true },
+      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), duration: null },
+      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), type: 'permanent' },
+      { banned_user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason: 'Spam' },
       { user_id: userId },
     ] : [];
     
