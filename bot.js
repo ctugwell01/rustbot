@@ -787,7 +787,7 @@ function isCD(u) { const l = cooldowns.get(u); return l && Date.now() - l < CONF
 function setCD(u) { cooldowns.set(u, Date.now()); }
 
 // Sub goal tracker (update manually when subs change)
-let subGoal = { current: 38.76, target: 1550, deadline: 'before summer', label: 'tip goal' };
+let subGoal = { current: 77.63, target: 2000, deadline: 'before summer', label: 'tip goal' };
 
 const STATIC = {
   '!discord': 'https://discord.gg/4DHRdH9dz5',
@@ -801,7 +801,7 @@ const STATIC = {
   '!drops': 'Drops begin on 11/13 make sure to visit https://kick.facepunch.com/ and follow the directions to get your free Rust skin!',
   '!evilsheep': 'Check out EvilSheep: https://evilsheep.io/',
   '!combatarena': 'Best Rust minigame server in the US — Combat Arena built by Kris himself. Go check it out!',
-  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict !donate',
+  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict !donate !so',
 };
 
 // ─────────────────────────────────────────
@@ -956,7 +956,7 @@ async function processMessage(data) {
 
     // !ban — manual ban command for streamer and mods
     if (cmdLower === '!ban') {
-      const isMod = isVIP || username.toLowerCase() === '5headnn';
+      const isMod = username.toLowerCase() === '5headnn' || (sender?.is_moderator === true);
       if (isMod && args) {
         const targetUser = args.split(' ')[0].replace('@', '');
         await sendChatMessage(`/ban ${targetUser} banned by mod`);
@@ -983,6 +983,37 @@ async function processMessage(data) {
     }
 
     // !golive — manually trigger live announcement (streamer only)
+    // !so @username — shoutout command (streamer and VIPs only)
+    if (cmdLower === '!so' || cmdLower === '!shoutout') {
+      const isMod = username.toLowerCase() === '5headnn' || (sender?.is_moderator === true);
+      if (isMod && args) {
+        const target = args.replace('@', '').trim();
+        try {
+          // Try to fetch their channel info for a better shoutout
+          const tok = await getToken();
+          const headers = tok
+            ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
+            : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
+          const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${target.toLowerCase()}`, { headers });
+          if (res.ok) {
+            const data = await res.json();
+            const channel = data?.data?.[0];
+            const category = channel?.category?.name || 'variety';
+            const isLive = !!(channel?.stream?.is_live || channel?.stream);
+            const viewers = channel?.stream?.viewer_count || 0;
+            const liveStr = isLive ? ` — they're LIVE right now with ${viewers} viewers!` : '';
+            const msg = `🐑 BIG shoutout to @${target}! Go show them some EvilSheep love — kick.com/${target.toLowerCase()} — playing ${category}${liveStr}`;
+            await sendChatMessage(msg, username);
+          } else {
+            await sendChatMessage(`🐑 BIG shoutout to @${target}! Go show them some EvilSheep love — kick.com/${target.toLowerCase()}`, username);
+          }
+        } catch(e) {
+          await sendChatMessage(`🐑 BIG shoutout to @${target}! Go show them some EvilSheep love — kick.com/${target.toLowerCase()}`, username);
+        }
+      }
+      return;
+    }
+
     if (cmdLower === '!golive' && username.toLowerCase() === '5headnn') {
       goLiveFired = false; // Reset lock so it fires
       await handleGoLive();
@@ -1199,10 +1230,13 @@ function connectToKick() {
 
   // Sub / gift sub events — bind multiple possible event names
   const handleSubEvent = async (data) => {
-    const username = data.username || data.user?.username || 'Someone';
-    const months = data.months || 1;
-    const isGift = data.is_gift || false;
-    const gifter = data.gifter_username || data.gifted_by?.username || null;
+    // Log raw data so we can see what Kick actually sends
+    console.log('📦 Sub event raw data:', JSON.stringify(data).substring(0, 300));
+    const username = data.username || data.user?.username || data.subscriber?.username || 
+                     data.subscriber_username || data.display_name || data.name || 'Someone';
+    const months = data.months || data.months_subscribed || data.streak_months || 1;
+    const isGift = data.is_gift || data.gifted || false;
+    const gifter = data.gifter_username || data.gifted_by?.username || data.gifter?.username || null;
 
     // Gift bomb — someone gifted multiple subs at once
     const quantity = data.quantity || data.gifted_quantity || data.number_of_gifts || 0;
@@ -1269,6 +1303,21 @@ function connectToKick() {
     if (eventName.includes('Subscription') || eventName.includes('subscription') || eventName.includes('Gift') || eventName.includes('gift')) {
       handleSubEvent(data).catch(console.error);
     }
+    // Handle clip created events
+    if (eventName.includes('Clip') || eventName.includes('clip')) {
+      const clipTitle = data?.clip?.title || data?.title || 'New clip';
+      const clipUrl = data?.clip?.url || data?.url || data?.clip_url || `https://kick.com/${CONFIG.channelSlug}?clips`;
+      const clipper = data?.clip?.created_by?.username || data?.created_by?.username || data?.username || 'Someone';
+      console.log(`🎬 Clip created by ${clipper}: ${clipTitle}`);
+      // Post in Discord
+      try {
+        const d = require('./discord');
+        if (d.notifyClip) d.notifyClip(clipper, clipTitle, clipUrl).catch(console.error);
+      } catch(e) {}
+      // Thank them in chat
+      sendChatMessage(`🎬 ${clipper} just clipped "${clipTitle}" — nice one! ${clipUrl}`).catch(console.error);
+    }
+
     // Handle incoming raid events
     if (eventName.includes('Raid') || eventName.includes('raid') || eventName.includes('Host') || eventName.includes('host')) {
       const raiderName = data?.host_username || data?.raider?.username || data?.from_channel || data?.username || 'someone';
@@ -1360,7 +1409,7 @@ function connectToKick() {
         ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
         : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
       const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${CONFIG.channelSlug}`, { headers });
-      if (!res.ok) { console.log(`📡 Live check returned ${res.status}`); return; }
+      if (!res.ok) { if (res.status !== 401) console.log(`📡 Live check returned ${res.status}`); return; }
       const data = await res.json();
       const isLive = !!(data?.data?.[0]?.stream?.is_live || data?.data?.[0]?.stream);
       console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'}`);
