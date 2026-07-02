@@ -7,6 +7,10 @@
   /help\\s+you\\s+grow/i,
   /bots?\\s+keep/i,
   /ai\\s+bots?\\s+(keep|help|grow)/i, AI Rust Chatbot for kick.com/5headnn
+  /tired\s+of\s+streaming\s+to\s+zero/i,
+  /streaming\s+to\s+zero/i,
+  /let.?s\s+change\s+that/i,
+  /nezhna/i,
  * Kick OAuth 2.1 with PKCE
  */
 
@@ -522,6 +526,17 @@ const SPAM_PATTERNS = [
   /help\\s+you\\s+grow/i,
   /bots?\\s+keep/i,
   /ai\\s+bots?\\s+(keep|help|grow)/i,
+  /instant\s+kick\s+vote/i,
+  /view\s*b[o0]t/i,
+  /viewb[o0]t/i,
+  /b[o0]t\s*&?\s*p[o0]ll/i,
+  /kick\s+vote\s+b/i,
+  /free\s+(view|follow|sub)/i,
+  /get\s+(more\s+)?(view|follow|sub)/i,
+  /increase\s+your\s+(view|follow)/i,
+  /boost\s+your\s+(stream|channel|view)/i,
+  /smm\s*panel/i,
+  /buy\s+(view|follow|sub)/i,
 ];
 
 function normalizeText(text) {
