@@ -127,7 +127,7 @@ const KICK_MOD = {
   redirectUri: 'https://rustbot-production.up.railway.app/mod-callback',
   authUrl: 'https://id.kick.com/oauth/authorize',
   tokenUrl: 'https://id.kick.com/oauth/token',
-  scopes: ['user:read', 'channel:read', 'events:subscribe', 'channel:write', 'channel:moderate'],
+  scopes: ['user:read', 'channel:read', 'events:subscribe', 'channel:write', 'moderation:ban'],
 };
 
 let modTokens = null;
