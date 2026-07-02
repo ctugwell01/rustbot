@@ -251,6 +251,11 @@ client.once('ready', async () => {
       console.log(`📢 Live channel found: ${liveChannel.name}`);
       client.liveChannel = liveChannel;
     }
+    client.clipsChannel = guild.channels.cache.find(c =>
+      c.name === 'stream-clips' && c.isTextBased()
+    );
+    if (client.clipsChannel) console.log(`🎬 Clips channel found: ${client.clipsChannel.name}`);
+
     const sniperChannel = guild.channels.cache.find(c =>
       c.name === 'snipers' && c.isTextBased()
     );
@@ -546,4 +551,20 @@ async function notifyOwner(message) {
   }
 }
 
-module.exports = { announceGoLive, alertSniper, notifyFollow, notifySub, notifyOwner };
+async function notifyClip(clipper, title, url) {
+  const target = client.clipsChannel || client.liveChannel || generalChannel;
+  if (!target) return;
+  try {
+    const embed = new EmbedBuilder()
+      .setColor(0x53fc18)
+      .setTitle('🎬 New Clip!')
+      .setDescription(`**${clipper}** just clipped **"${title}"**\n[Watch it here](${url})`)
+      .setURL(url)
+      .setTimestamp()
+      .setFooter({ text: 'SheepSync' });
+    await target.send({ embeds: [embed] });
+    console.log(`🎬 Clip notification sent: ${title}`);
+  } catch(e) { console.error('Clip notify error:', e.message); }
+}
+
+module.exports = { announceGoLive, alertSniper, notifyFollow, notifySub, notifyOwner, notifyClip };
