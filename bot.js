@@ -7,8 +7,10 @@
   /help\\s+you\\s+grow/i,
   /bots?\\s+keep/i,
   /ai\\s+bots?\\s+(keep|help|grow)/i, AI Rust Chatbot for kick.com/5headnn
-  /tired\s+of\s+streaming\s+to\s+zero/i,
-  /streaming\s+to\s+zero/i,
+  /tired\s+of\s+streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
+  /streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
+  /tired\s+of\s+(zero|0|1)\s*(view|viewer)/i,
+  /are\s+you\s+tired\s+of/i,
   /let.?s\s+change\s+that/i,
   /nezhna/i,
  * Kick OAuth 2.1 with PKCE
