@@ -495,4 +495,55 @@ setInterval(checkTikTok, 5 * 60 * 1000);
 setTimeout(checkTikTok, 10000);
 
 client.login(process.env.DISCORD_TOKEN);
-module.exports = { announceGoLive, alertSniper };
+
+async function notifyFollow(username) {
+  const target = client.welcomeChannel || generalChannel;
+  if (!target) return;
+  try {
+    const embed = new EmbedBuilder()
+      .setColor(0x53fc18)
+      .setTitle('💜 New Follower!')
+      .setDescription(`**${username}** just followed the channel — welcome to the EvilSheep gang! 🐑`)
+      .setTimestamp()
+      .setFooter({ text: 'SheepSync' });
+    await target.send({ embeds: [embed] });
+    console.log(`💜 Follow notification sent for ${username}`);
+  } catch(e) { console.error('Follow notify error:', e.message); }
+}
+
+async function notifySub(username, months, gifted) {
+  const target = client.liveChannel || generalChannel;
+  if (!target) return;
+  try {
+    const isGift = gifted ? ' (gifted)' : '';
+    const monthsStr = months > 1 ? ` (${months} months)` : '';
+    const embed = new EmbedBuilder()
+      .setColor(0xFFD700)
+      .setTitle('⭐ New Sub — BIG CHAD ALERT!')
+      .setDescription(`**${username}** just subbed${monthsStr}${isGift}! Absolute legend 🐑`)
+      .setTimestamp()
+      .setFooter({ text: 'SheepSync' });
+    await target.send({ embeds: [embed] });
+    console.log(`⭐ Sub notification sent for ${username}`);
+  } catch(e) { console.error('Sub notify error:', e.message); }
+}
+
+async function notifyOwner(message) {
+  // DM the server owner when bot needs attention
+  try {
+    const guild = client.guilds.cache.first();
+    if (!guild) return;
+    const owner = await guild.fetchOwner();
+    if (owner) {
+      await owner.send(`🤖 **SheepSync Alert**\n${message}`);
+      console.log('📨 Owner notified via Discord DM');
+    }
+  } catch(e) { 
+    // Fallback: post in general channel
+    try {
+      if (generalChannel) await generalChannel.send(`🤖 **SheepSync Alert** — ${message}`);
+    } catch(e2) { console.error('Owner notify error:', e2.message); }
+  }
+}
+
+module.exports = { announceGoLive, alertSniper, notifyFollow, notifySub, notifyOwner };
