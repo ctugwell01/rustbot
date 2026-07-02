@@ -647,7 +647,7 @@ async function banUser(username, messageId = null, reason = 'Spam') {
           body: JSON.stringify(body),
         });
         const data = await res.json();
-        console.log(`🔨 Ban attempt (${JSON.stringify(body)}):`, JSON.stringify(data));
+        console.log(`🔨 Ban attempt (${JSON.stringify(body)}) → ${res.status}:`, JSON.stringify(data));
         if (res.ok) { console.log(`🔨 Banned ${username} via moderation API`); return; }
       } catch(e) { console.error('Ban attempt error:', e.message); }
     }
