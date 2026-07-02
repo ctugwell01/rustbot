@@ -625,18 +625,25 @@ async function banUser(username, messageId = null, reason = 'Spam') {
     // Look up numeric user_id — required by the working ban endpoint
     const userId = await lookupUserId(username, useToken);
 
-    // Primary: correct endpoint with numeric user_id (documented working endpoint)
-    if (userId) {
+    // Try multiple body formats — Kick docs aren't clear on exact field names
+    const banBodies = userId ? [
+      { banned_user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
+      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
+      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), permanent: true },
+      { user_id: userId },
+    ] : [];
+    
+    for (const body of banBodies) {
       try {
         const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), user_id: userId, reason }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
-        if (res.ok) { console.log(`🔨 Banned ${username} (user_id: ${userId}) via moderation API`); return; }
-        else { console.error('Moderation API ban failed:', JSON.stringify(data)); }
-      } catch(e) { console.error('Moderation API error:', e.message); }
+        console.log(`🔨 Ban attempt (${JSON.stringify(body)}):`, JSON.stringify(data));
+        if (res.ok) { console.log(`🔨 Banned ${username} via moderation API`); return; }
+      } catch(e) { console.error('Ban attempt error:', e.message); }
     }
 
     // Fallback: try with username directly
