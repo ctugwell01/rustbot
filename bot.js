@@ -600,7 +600,10 @@ async function deleteMessage(messageId) {
 }
 
 async function lookupUserId(username, token) {
-  // Look up numeric user ID from username — required by new ban API
+  // Check cache first — populated from chat messages
+  const cached = userIdCache[username.toLowerCase()];
+  if (cached) { console.log(`🔍 ${username} → user_id ${cached} (from cache)`); return cached; }
+  // Fall back to API lookup
   try {
     const res = await fetch(`https://api.kick.com/public/v1/users?username=${encodeURIComponent(username)}`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
@@ -818,9 +821,16 @@ let lastChatActivity = Date.now();
 let lastPusherActivity = Date.now();
 let watchdogActive = false;
 
+// Cache user IDs from chat messages so we can ban without API lookup
+const userIdCache = {};
+
 async function processMessage(data) {
   const username = data.sender?.username || '';
   lastChatActivity = Date.now();
+  // Cache user ID from sender data (Kick includes it in chat events)
+  if (username && data.sender?.id) {
+    userIdCache[username.toLowerCase()] = data.sender.id;
+  }
   const content = data.content || '';
   // Ignore own messages and protected bot accounts
   const IGNORED_BOTS = ['sheepsyncbot', 'sheepsync', 'botrix', 'streamelements', 'nightbot', 'moobot'];
