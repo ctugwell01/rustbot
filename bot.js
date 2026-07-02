@@ -720,12 +720,16 @@ async function timeoutUser(username, duration = 600, reason = 'timed out') {
 }
 
 const ROAST_RESPONSES = [
-  "get this bot out of here 🗑️ banned.",
-  "spam detected, you're gone. touch grass.",
-  "lmaooo another bot 💀 see ya never.",
-  "bro really thought that would work here 😭 banned.",
-  "the audacity. banned. deleted. gone.",
-  "not on my watch 🔨 get out.",
+  "oh well, that's another shitter gone 🐑",
+  "another one bites the dust. chat stays clean lads",
+  "🚫 gone. next.",
+  "and another one gone 👋 EvilSheep don't play",
+  "chat security working overtime today innit",
+  "see ya, wouldn't wanna be ya 🗑️",
+  "cleaned that up quick. where were we lads",
+  "nah we don't do that here. gone.",
+  "one less idiot in chat, you're welcome 🐑",
+  "right, who else wants to try it",
 ];
 
 // ─────────────────────────────────────────
@@ -900,11 +904,11 @@ async function processMessage(data) {
   const isRaid = await checkForRaid(username, content);
   if (isRaid) return;
 
-  // Spam / bot check — ban and roast immediately
+  // Spam / bot check — ban silently then post casual message
   if (isSpam(content) || isSpamAdvanced(content)) {
-    const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
-    await sendChatMessage(roast, username);
     await banUser(username, data.id || null);
+    const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
+    await sendChatMessage(roast, username); // @ them so chat knows who got banned
     console.log(`🚫 Spam detected from ${username}: ${content}`);
     return;
   }
