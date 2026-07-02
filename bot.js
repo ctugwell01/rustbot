@@ -1232,8 +1232,11 @@ function connectToKick() {
   const handleSubEvent = async (data) => {
     // Log raw data so we can see what Kick actually sends
     console.log('📦 Sub event raw data:', JSON.stringify(data).substring(0, 300));
+    // Skip empty events (fired on startup with no data)
+    if (!data || Object.keys(data).length === 0) { console.log('⚠️ Empty sub event — skipping'); return; }
     const username = data.username || data.user?.username || data.subscriber?.username || 
-                     data.subscriber_username || data.display_name || data.name || 'Someone';
+                     data.subscriber_username || data.display_name || data.name || null;
+    if (!username) { console.log('⚠️ Sub event has no username — skipping (will be caught by webhook instead)'); return; }
     const months = data.months || data.months_subscribed || data.streak_months || 1;
     const isGift = data.is_gift || data.gifted || false;
     const gifter = data.gifter_username || data.gifted_by?.username || data.gifter?.username || null;
