@@ -862,15 +862,6 @@ async function processMessage(data) {
   // Also ignore any message that starts with our bot prefix
   if (content.startsWith('!meta') && username.toLowerCase().includes('sheepsync')) return;
 
-  // Link filter — delete links from non-mods/non-subs
-  const hasLink = /https?:\/\/|www\.|\.com|\.io|\.gg|\.tv|\.net|\.org/i.test(content);
-  if (hasLink && !isVIP && !isSub) {
-    await deleteMessage(data.id || null);
-    await sendChatMessage(`links are for subs and mods only NN, get it deleted`, username);
-    console.log(`🔗 Link deleted from ${username}: ${content}`);
-    return;
-  }
-
   // Stream sniper detection — ignore the streamer himself
   const isStreamer = username.toLowerCase() === '5headnn';
   if (!isStreamer && SNIPER_PATTERNS.some(p => p.test(content))) {
@@ -889,7 +880,7 @@ async function processMessage(data) {
   const raidMatch = content.match(/^(.+?)\s+is raiding with\s+(\d+)/i) ||
                     content.match(/^(.+?)\s+raided\s+(?:the channel\s+)?with\s+(\d+)/i) ||
                     content.match(/^(.+?)\s+has raided/i);
-  if (raidMatch && (sender?.is_staff || sender?.role === 'moderator' || username.toLowerCase() === 'kick')) {
+  if (raidMatch && (data.sender?.is_staff || data.sender?.role === 'moderator' || username.toLowerCase() === 'kick')) {
     const raiderName = raidMatch[1].trim();
     const viewerCount = raidMatch[2] || '';
     console.log(`🎉 Raid detected in chat from: ${raiderName}`);
@@ -919,6 +910,15 @@ async function processMessage(data) {
   const isVIP = isOwner || badges.some(b => b.type === 'vip' || b.type === 'moderator' || b.type === 'broadcaster');
   const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'og' || b.type === 'founder');
   const userStatus = isVIP ? '[VIP]' : isSub ? '[SUB]' : '[VIEWER]';
+
+  // Link filter — now after badge detection so isVIP/isSub are defined
+  const hasLink = /https?:\/\/|www\.|\.com|\.io|\.gg|\.tv|\.net|\.org/i.test(content);
+  if (hasLink && !isVIP && !isSub) {
+    await deleteMessage(data.id || null);
+    await sendChatMessage(`links are for subs and mods only NN`, username);
+    console.log(`🔗 Link deleted from ${username}: ${content}`);
+    return;
+  }
 
   console.log(`💬 [${username}] ${userStatus}: ${content}`);
   const lower = content.toLowerCase();
@@ -997,7 +997,7 @@ async function processMessage(data) {
 
     // !ban — manual ban command for streamer and mods
     if (cmdLower === '!ban') {
-      const isMod = username.toLowerCase() === '5headnn' || (sender?.is_moderator === true);
+      const isMod = username.toLowerCase() === '5headnn' || (data.sender?.is_moderator === true);
       if (isMod && args) {
         const targetUser = args.split(' ')[0].replace('@', '');
         await sendChatMessage(`/ban ${targetUser} banned by mod`);
@@ -1026,7 +1026,7 @@ async function processMessage(data) {
     // !golive — manually trigger live announcement (streamer only)
     // !so @username — shoutout command (streamer and VIPs only)
     if (cmdLower === '!so' || cmdLower === '!shoutout') {
-      const isMod = username.toLowerCase() === '5headnn' || (sender?.is_moderator === true);
+      const isMod = username.toLowerCase() === '5headnn' || (data.sender?.is_moderator === true);
       if (isMod && args) {
         const target = args.replace('@', '').trim();
         try {
