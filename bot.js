@@ -1460,8 +1460,17 @@ function connectToKick() {
       if (isLive && !wasLive) {
         wasLive = true;
         if (firstCheck) {
-          console.log('🟢 Already live on startup — suppressing announcement');
-          streamStartTime = streamStartTime || Date.now();
+          // Check stream start time — if live for less than 5 mins, announce
+          const streamData = data?.data?.[0]?.stream;
+          const startedAt = streamData?.started_at ? new Date(streamData.started_at) : null;
+          const liveForMins = startedAt ? (Date.now() - startedAt.getTime()) / 60000 : 999;
+          if (liveForMins < 5 && !goLiveFired) {
+            console.log(`🟢 Stream just started (${Math.round(liveForMins)} mins ago) — announcing!`);
+            handleGoLive().catch(console.error);
+          } else {
+            console.log(`🟢 Already live on startup (${Math.round(liveForMins)} mins) — suppressing announcement`);
+            streamStartTime = streamStartTime || Date.now();
+          }
         } else {
           if (!goLiveFired) handleGoLive().catch(console.error);
         }
