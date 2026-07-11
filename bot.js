@@ -450,7 +450,7 @@ async function sendChatMessage(message, replyTo = null) {
 const SNIPER_PATTERNS = [
   /imma? (snipe|find|come|hunt) (you|u|him)/i,
   /i('?m| am) (gonna |going to )?(snipe|find|come|hunt) (you|u|him)/i,
-  /stream snip/i,
+  /stream snip(ing|er|ped|ping) (you|u|him|5head)/i,  // must target 5head specifically
   /i found (you|u|him)/i,
   /coming for (you|u|him)/i,
   /tell me (the )?server/i,
@@ -862,9 +862,9 @@ async function processMessage(data) {
   // Also ignore any message that starts with our bot prefix
   if (content.startsWith('!meta') && username.toLowerCase().includes('sheepsync')) return;
 
-  // Stream sniper detection — ignore the streamer himself
+  // Stream sniper detection — ignore the streamer and mods/VIPs
   const isStreamer = username.toLowerCase() === '5headnn';
-  if (!isStreamer && SNIPER_PATTERNS.some(p => p.test(content))) {
+  if (!isStreamer && !isVIP && SNIPER_PATTERNS.some(p => p.test(content))) {
     const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
     await sendChatMessage(roast, username);
     console.log(`🎯 Sniper detected: ${username}`);
