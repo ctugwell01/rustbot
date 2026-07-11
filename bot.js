@@ -1786,4 +1786,13 @@ app.listen(PORT, () => {
   }
 
   connectToKick();
+
+  // Re-subscribe to webhooks on startup using saved token
+  setTimeout(async () => {
+    const tok = await getToken();
+    if (tok) {
+      console.log('🔔 Re-subscribing to webhooks on startup...');
+      subscribeToWebhooks(tok).catch(console.error);
+    }
+  }, 5000); // Wait 5s for tokens to load
 });
