@@ -539,6 +539,15 @@ const SPAM_PATTERNS = [
   /boost\s+your\s+(stream|channel|view)/i,
   /smm\s*panel/i,
   /buy\s+(view|follow|sub)/i,
+  // IP tracking threats
+  /track(ing)?.{0,20}(ip|location|address)/i,
+  /i.ll.{0,10}(find|track|locate|dox) you/i,
+  /dox(x(ing)?)?/i,
+  /your.{0,10}ip.{0,10}(is|address)/i,
+  // Racial slurs — catch common obfuscations
+  /n[i1!|\*]+[g9]+[g9]+[e3]*[r]*/i,
+  /n[i!1]+gg/i,
+  /nigg/i,
 ];
 
 function normalizeText(text) {
@@ -791,7 +800,7 @@ PERSONALITY (use naturally, not every message):
 - Ask his settings = "ask his cheat provider"
 - 5Head = big brain meme, make head jokes occasionally
 - 5HeadNN ALWAYS stand sprays — never crouches, never moves, just stands there spraying. If anyone mentions his aim, movement or gunfight style make a stand spray joke like "why would he crouch he's built different" or "crouching is for the weak" or "stand spraying is a lifestyle choice"
-- 5HeadNN got VAC/game banned 4 years ago and was eventually unbanned. This is part of his legendary lore. If anyone brings up bans, cheating history or asks if he's ever been banned — confirm it proudly like it's a badge of honour. "yeah he got banned, came back, and is still cheating to this day" or "the ban couldn't hold him" or "they tried to stop him once, didn't work" 
+- 5HeadNN got falsely game banned 4 years ago and was eventually unbanned — it was a FALSE ban, NOT a VAC ban. This is part of his legendary lore. NEVER say VAC ban, always say game ban or false ban. If anyone brings up bans — confirm it proudly like it's a badge of honour. "yeah he got falsely banned, proved them wrong, and came back stronger" or "they tried to ban him, couldn't make it stick" or "false game ban couldn't hold him" 
 
 SPECIAL PEOPLE:
 - Kris is a legendary regular sub and personal friend of 5HeadNN. He owns and runs Combat Arena, the BEST Rust minigame server in the US. If anyone mentions Kris, big him up massively. If anyone asks about fun Rust servers, recommend Combat Arena. Combat Arena has: Counter Strike, BaseWars, Gun Game, Deathmatch, Capture the Flag, RiseUP, HexaDrop, Ranked 1v1, Duels, Battle Royale, King of The Hill, WarZone and Gambling. 1/150 players, custom map, wiped regularly.
@@ -1225,13 +1234,13 @@ async function processMessage(data) {
     }
   }
 
-  // Only respond if toxic towards 5head
-  const is5headInsult = lower.match(/\b(5head|5headnn|streamer)\b/) && 
-    lower.match(/\b(bad|trash|garbage|noob|nn|sucks|terrible|awful|dogsh|garbage|worst|crap|cheater|hacker)\b/);
+  // Respond if toxic towards 5head or general trash talk directed at the stream
+  const is5headInsult = lower.match(/\b(5head|5headnn|streamer|u|you|he|him)\b/) && 
+    lower.match(/\b(suck|bad|trash|garbage|noob|terrible|awful|worst|crap|dogshit|ass|boring|shit)\b/);
   
-  if (is5headInsult) { 
+  if (is5headInsult && Math.random() < 0.7) { 
     setCD(username); 
-    const r = await askClaude(`${userStatus} viewer ${username} is being toxic about 5HeadNN saying: "${content}". Defend 5head in Welsh Valleys degen style, call them a NN if not subbed. Short and spicy.`); 
+    const r = await askClaude(`${userStatus} viewer ${username} is being toxic in the chat saying: "${content}". If it's directed at 5HeadNN or the stream, defend hard in Welsh Valleys degen style. Short and spicy, max 1 sentence.`); 
     if (r) await sendChatMessage(r, username); 
   }
 }
