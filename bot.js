@@ -477,7 +477,7 @@ const SPAM_PATTERNS = [
   /become your (dedicated|loyal) fan/i,
   /support.*your.*discord/i,
   /grow.*discord/i,
-  /follow me/i,
+  // /follow me/ removed — too broad, catches innocent messages
   /check out my (channel|stream|profile)/i,
   /(onlyfans|cashapp|paypal\.me)/i,
   /5naies/i,
