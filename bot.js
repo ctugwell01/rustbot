@@ -539,6 +539,11 @@ const SPAM_PATTERNS = [
   /boost\s+your\s+(stream|channel|view)/i,
   /smm\s*panel/i,
   /buy\s+(view|follow|sub)/i,
+  /cheapest.{0,20}(bot|follow|view|sub)/i,
+  /legit.{0,20}(follower|view).{0,10}bot/i,
+  /follower\s+bot/i,
+  /own\s*kick/i,
+  /ownkick/i,
   // IP tracking threats
   /track(ing)?.{0,20}(ip|location|address)/i,
   /i.ll.{0,10}(find|track|locate|dox) you/i,
