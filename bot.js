@@ -474,6 +474,10 @@ const SPAM_PATTERNS = [
   /\w+[\s\W]*\.[\s\W]*c[\s\W]*o[\s\W]*m/i,
   /discord\.gg\/[a-zA-Z0-9]+/i,        // actual discord invite links only
   /add me on discord/i,
+  /add me on/i,
+  /stay connected/i,
+  /feel free to add/i,
+  /to stay connected/i,
   /become your (dedicated|loyal) fan/i,
   /support.*your.*discord/i,
   /grow.*discord/i,
@@ -556,23 +560,44 @@ const SPAM_PATTERNS = [
 ];
 
 function normalizeText(text) {
-  // Replace unicode lookalike characters with ASCII equivalents
+  // Small caps unicode -> normal letters
+  const smallCapsMap = {
+    'ᴀ':'a','ʙ':'b','ᴄ':'c','ᴅ':'d','ᴇ':'e','ꜰ':'f','ɢ':'g','ʜ':'h','ɪ':'i',
+    'ᴊ':'j','ᴋ':'k','ʟ':'l','ᴍ':'m','ɴ':'n','ᴏ':'o','ᴘ':'p','ǫ':'q','ʀ':'r',
+    'ꜱ':'s','ᴛ':'t','ᴜ':'u','ᴠ':'v','ᴡ':'w','x':'x','ʏ':'y','ᴢ':'z',
+    'ᴬ':'a','ᴮ':'b','ᴰ':'d','ᴱ':'e','ᴳ':'g','ᴴ':'h','ᴵ':'i','ᴶ':'j',
+    'ᴷ':'k','ᴸ':'l','ᴹ':'m','ᴺ':'n','ᴼ':'o','ᴾ':'p','ᴿ':'r','ᵀ':'t',
+    'ᵁ':'u','ᵂ':'w',
+  };
+  text = text.split('').map(c => smallCapsMap[c] || c).join('');
+
   return text
-    .replace(/[оοооο]/g, 'o')
-    .replace(/[ааа]/g, 'a')
-    .replace(/[ссс]/g, 'c')
+    .replace(/[оοооο𝐨𝗼𝘰𝙤𝚘]/g, 'o')
+    .replace(/[ааа𝐚𝗮𝘢]/g, 'a')
+    .replace(/[ссс𝐜]/g, 'c')
     .replace(/[ррр]/g, 'r')
-    .replace(/[еее]/g, 'e')
-    .replace(/[ііі]/g, 'i')
+    .replace(/[еее𝐞𝗲]/g, 'e')
+    .replace(/[ііі𝐢]/g, 'i')
     .replace(/[ккк]/g, 'k')
     .replace(/[ոﭓ]/g, 'n')
     .replace(/[դ]/g, 'd')
-    .replace(/[Ա-Ֆա-և]/g, c => c) // Armenian
     .replace(/[ԝԝ]/g, 'w')
     .replace(/[ϲϲ]/g, 'c')
+    .replace(/[𝐝𝗱𝘥]/g, 'd')
+    .replace(/[𝐟𝗳]/g, 'f')
+    .replace(/[𝐦𝗺]/g, 'm')
+    .replace(/[𝐬𝘀]/g, 's')
+    .replace(/[𝐭𝘁]/g, 't')
+    .replace(/[𝐰𝘄]/g, 'w')
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase();
+}
+
+function hasSmallCaps(text) {
+  // Detect if message uses small caps unicode — common spam evasion
+  const smallCapsChars = /[ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢ]/;
+  return smallCapsChars.test(text);
 }
 
 function isSpamAdvanced(text) {
@@ -597,6 +622,12 @@ function isSpamAdvanced(text) {
   if (normalized.includes('cheapest') && normalized.includes('bot')) return true;
   if (normalized.includes('custom') && normalized.includes('username') && normalized.includes('bot')) return true;
   
+  // Small caps + any social/promo keyword = spam evasion attempt
+  if (hasSmallCaps(text)) {
+    const promoKeywords = ['discord', 'follow', 'kick', 'stream', 'add me', 'connected', 'tag', 'dm', 'check out'];
+    if (promoKeywords.some(k => normalized.includes(k))) return true;
+  }
+
   return SPAM_PATTERNS.some(p => p.test(text)) || SPAM_PATTERNS.some(p => p.test(normalized));
 }
 
