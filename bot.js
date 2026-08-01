@@ -703,8 +703,7 @@ async function banUser(username, messageId = null, reason = 'Spam') {
   try {
     const modToken = await getModToken();
     const token = await getToken();
-    // Try broadcaster token first — Kick ban API may require broadcaster auth
-    const useToken = token || modToken;
+    const useToken = modToken || token;
     if (!useToken) { console.error('No token available for ban'); return; }
 
     // Look up numeric user_id — required by the working ban endpoint
