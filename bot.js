@@ -703,21 +703,19 @@ async function banUser(username, messageId = null, reason = 'Spam') {
   try {
     const modToken = await getModToken();
     const token = await getToken();
-    const useToken = modToken || token;
+    // Try broadcaster token first — Kick ban API may require broadcaster auth
+    const useToken = token || modToken;
     if (!useToken) { console.error('No token available for ban'); return; }
 
     // Look up numeric user_id — required by the working ban endpoint
     const userId = await lookupUserId(username, useToken);
 
-    // Try multiple body formats — Kick docs aren't clear on exact field names
+    // IDs must be strings not numbers per Kick API docs
     const banBodies = userId ? [
-      { banned_user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
-      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
-      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), permanent: true },
-      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), duration: null },
-      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), type: 'permanent' },
-      { banned_user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason: 'Spam' },
-      { user_id: userId },
+      { user_id: String(userId), broadcaster_user_id: String(CONFIG.broadcasterId), reason: 'Spam' },
+      { user_id: String(userId), broadcaster_user_id: String(CONFIG.broadcasterId) },
+      { user_id: userId, broadcaster_user_id: String(CONFIG.broadcasterId), reason: 'Spam' },
+      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason: 'Spam' },
     ] : [];
     
     for (const body of banBodies) {
@@ -767,7 +765,7 @@ async function timeoutUser(username, duration = 600, reason = 'timed out') {
       const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), user_id: userId, duration: durationMins, reason }),
+        body: JSON.stringify({ broadcaster_user_id: String(CONFIG.broadcasterId), user_id: String(userId), duration: durationMins, reason }),
       });
       if (res.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); return; }
       else { const d = await res.json(); console.error('Timeout failed:', JSON.stringify(d)); }
@@ -776,7 +774,7 @@ async function timeoutUser(username, duration = 600, reason = 'timed out') {
     const res2 = await fetch('https://api.kick.com/public/v1/moderation/bans', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, duration: durationMins, reason }),
+      body: JSON.stringify({ broadcaster_user_id: String(CONFIG.broadcasterId), username, duration: durationMins, reason }),
     });
     if (res2.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); }
     else { const d = await res2.json(); console.error('Timeout fallback failed:', JSON.stringify(d)); }
