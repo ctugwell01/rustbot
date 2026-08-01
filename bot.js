@@ -671,17 +671,30 @@ async function lookupUserId(username, token) {
   // Check cache first — populated from chat messages
   const cached = userIdCache[username.toLowerCase()];
   if (cached) { console.log(`🔍 ${username} → user_id ${cached} (from cache)`); return cached; }
-  // Fall back to API lookup
-  try {
-    const res = await fetch(`https://api.kick.com/public/v1/users?username=${encodeURIComponent(username)}`, {
-      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const userId = data?.data?.[0]?.id || data?.data?.id;
-      if (userId) { console.log(`🔍 Resolved ${username} → user_id ${userId}`); return userId; }
-    }
-  } catch(e) { console.error('User lookup error:', e.message); }
+  
+  // Try multiple endpoints to find user ID
+  const endpoints = [
+    `https://api.kick.com/public/v1/users?username=${encodeURIComponent(username)}`,
+    `https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(username.toLowerCase())}`,
+  ];
+  
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const userId = data?.data?.[0]?.user_id || data?.data?.[0]?.id || 
+                       data?.data?.id || data?.data?.[0]?.broadcaster_user_id;
+        if (userId) { 
+          console.log(`🔍 Resolved ${username} → user_id ${userId}`);
+          userIdCache[username.toLowerCase()] = userId; // Cache for future
+          return userId; 
+        }
+      }
+    } catch(e) { console.error('User lookup error:', e.message); }
+  }
   return null;
 }
 
