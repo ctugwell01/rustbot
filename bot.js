@@ -709,12 +709,10 @@ async function banUser(username, messageId = null, reason = 'Spam') {
     // Look up numeric user_id — required by the working ban endpoint
     const userId = await lookupUserId(username, useToken);
 
-    // IDs must be strings not numbers per Kick API docs
+    // IDs must be integers per Kick API docs
     const banBodies = userId ? [
-      { user_id: String(userId), broadcaster_user_id: String(CONFIG.broadcasterId), reason: 'Spam' },
-      { user_id: String(userId), broadcaster_user_id: String(CONFIG.broadcasterId) },
-      { user_id: userId, broadcaster_user_id: String(CONFIG.broadcasterId), reason: 'Spam' },
-      { user_id: userId, broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason: 'Spam' },
+      { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason: 'Spam' },
+      { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
     ] : [];
     
     for (const body of banBodies) {
