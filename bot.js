@@ -745,7 +745,14 @@ async function banUser(username, messageId = null, reason = 'Spam') {
         else { const d = await res.json(); console.error(`Ban fallback failed (${attempt.url}):`, JSON.stringify(d)); }
       } catch(e) { console.error('Ban fallback error:', e.message); }
     }
-    if (!banned) console.error(`❌ All ban attempts failed for ${username}`);
+    if (!banned) {
+      // Final fallback — send /ban as chat command (works if SheepSyncBot is a mod)
+      try {
+        console.log(`⚡ Trying /ban chat command for ${username}`);
+        await sendChatMessage(`/ban ${username} Spam`);
+        console.log(`🔨 Sent /ban ${username} via chat command`);
+      } catch(e) { console.error('Chat ban error:', e.message); }
+    }
   } catch(e) { console.error('Ban error:', e.message); }
 }
 
