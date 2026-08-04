@@ -1,18 +1,5 @@
 /**
- * SheepSync —
-  /remove\\s+space/i,
-  /keep\\s+(the\\s+)?chat\\s+alive/i,
-  /grow\\s+your\\s+audience/i,
-  /stream\\s+more\\s+active/i,
-  /help\\s+you\\s+grow/i,
-  /bots?\\s+keep/i,
-  /ai\\s+bots?\\s+(keep|help|grow)/i, AI Rust Chatbot for kick.com/5headnn
-  /tired\s+of\s+streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
-  /streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
-  /tired\s+of\s+(zero|0|1)\s*(view|viewer)/i,
-  /are\s+you\s+tired\s+of/i,
-  /let.?s\s+change\s+that/i,
-  /nezhna/i,
+ * SheepSync — AI Rust Chatbot for kick.com/5headnn
  * Kick OAuth 2.1 with PKCE
  */
 
@@ -563,6 +550,12 @@ const SPAM_PATTERNS = [
   /n[i1!|\*]+[g9]+[g9]+[e3]*[r]*/i,
   /n[i!1]+gg/i,
   /nigg/i,
+  /tired\s+of\s+streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
+  /streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
+  /tired\s+of\s+(zero|0|1)\s*(view|viewer)/i,
+  /are\s+you\s+tired\s+of/i,
+  /let.?s\s+change\s+that/i,
+  /nezhna/i,
 ];
 
 function normalizeText(text) {
