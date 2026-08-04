@@ -1423,10 +1423,36 @@ function connectToKick() {
       const raiderName = data?.host_username || data?.raider?.username || data?.from_channel || data?.username || 'someone';
       const viewerCount = data?.viewers || data?.viewer_count || data?.number || '';
       console.log(`🎉 Incoming raid from: ${raiderName} with ${viewerCount} viewers`);
+      
+      // Welcome message in chat
       const raidMsg = viewerCount
         ? `OI OI massive shoutout to @${raiderName} for the raid with ${viewerCount} viewers — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`
         : `OI OI massive shoutout to @${raiderName} for the raid — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`;
       sendChatMessage(raidMsg).catch(console.error);
+
+      // Auto-shoutout — look up their channel and post info
+      setTimeout(async () => {
+        try {
+          const tok = await getToken();
+          const headers = tok
+            ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
+            : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
+          const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${raiderName.toLowerCase()}`, { headers });
+          if (res.ok) {
+            const d = await res.json();
+            const channel = d?.data?.[0];
+            const category = channel?.category?.name || 'variety';
+            const soMsg = `🐑 go show @${raiderName} some love — kick.com/${raiderName.toLowerCase()} — they play ${category}`;
+            await sendChatMessage(soMsg);
+          }
+        } catch(e) {}
+      }, 5000); // Wait 5s after welcome message
+
+      // Discord notification
+      try {
+        const d = require('./discord');
+        if (d.notifyOwner) d.notifyOwner(`🎉 Incoming raid from **${raiderName}**${viewerCount ? ` with ${viewerCount} viewers` : ''}!`).catch(()=>{});
+      } catch(e) {}
     }
 
     // Handle follow events
