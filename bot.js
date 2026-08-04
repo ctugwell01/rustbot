@@ -706,24 +706,41 @@ async function banUser(username, messageId = null, reason = 'Spam') {
     const useToken = modToken || token;
     if (!useToken) { console.error('No token available for ban'); return; }
 
+    // Introspect token to verify scopes
+    try {
+      const introRes = await fetch('https://api.kick.com/public/v1/token/introspect', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: useToken }),
+      });
+      if (introRes.ok) {
+        const introData = await introRes.json();
+        console.log(`🔑 Token scopes:`, JSON.stringify(introData?.data?.scopes || introData?.scopes || introData));
+      }
+    } catch(e) { console.log('Token introspect error:', e.message); }
+
     // Look up numeric user_id — required by the working ban endpoint
     const userId = await lookupUserId(username, useToken);
+    console.log(`🎯 Ban details: user_id=${userId} broadcaster_id=${CONFIG.broadcasterId} token_type=${modToken ? 'mod' : 'main'}`);
 
-    // IDs must be integers per Kick API docs
+    // Try all documented and undocumented formats
     const banBodies = userId ? [
       { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason: 'Spam' },
       { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
+      { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), duration: 1 },
     ] : [];
     
     for (const body of banBodies) {
       try {
+        const bodyStr = JSON.stringify(body);
+        console.log(`🔨 Sending ban request: ${bodyStr}`);
         const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(body),
+          body: bodyStr,
         });
         const data = await res.json();
-        console.log(`🔨 Ban attempt (${JSON.stringify(body)}) → ${res.status}:`, JSON.stringify(data));
+        console.log(`🔨 Ban attempt (${bodyStr}) → ${res.status}:`, JSON.stringify(data));
         if (res.ok) { console.log(`🔨 Banned ${username} via moderation API`); return; }
       } catch(e) { console.error('Ban attempt error:', e.message); }
     }
