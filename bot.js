@@ -706,43 +706,22 @@ async function banUser(username, messageId = null, reason = 'Spam') {
     const useToken = modToken || token;
     if (!useToken) { console.error('No token available for ban'); return; }
 
-    // Introspect token to verify scopes
-    try {
-      const introRes = await fetch('https://api.kick.com/public/v1/token/introspect', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: useToken }),
-      });
-      if (introRes.ok) {
-        const introData = await introRes.json();
-        console.log(`🔑 Token scopes:`, JSON.stringify(introData?.data?.scopes || introData?.scopes || introData));
-      }
-    } catch(e) { console.log('Token introspect error:', e.message); }
-
-    // Look up numeric user_id — required by the working ban endpoint
+    // Look up numeric user_id from cache or API
     const userId = await lookupUserId(username, useToken);
-    console.log(`🎯 Ban details: user_id=${userId} broadcaster_id=${CONFIG.broadcasterId} token_type=${modToken ? 'mod' : 'main'}`);
 
-    // Try all documented and undocumented formats
-    const banBodies = userId ? [
-      { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason: 'Spam' },
-      { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId) },
-      { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), duration: 1 },
-    ] : [];
-    
-    for (const body of banBodies) {
+    // Working format confirmed: user_id + broadcaster_user_id + reason as integers
+    if (userId) {
       try {
-        const bodyStr = JSON.stringify(body);
-        console.log(`🔨 Sending ban request: ${bodyStr}`);
+        const body = { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason };
         const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: bodyStr,
+          body: JSON.stringify(body),
         });
         const data = await res.json();
-        console.log(`🔨 Ban attempt (${bodyStr}) → ${res.status}:`, JSON.stringify(data));
         if (res.ok) { console.log(`🔨 Banned ${username} via moderation API`); return; }
-      } catch(e) { console.error('Ban attempt error:', e.message); }
+        else { console.error(`Ban failed → ${res.status}:`, JSON.stringify(data)); }
+      } catch(e) { console.error('Ban error:', e.message); }
     }
 
     // Fallback: try with username directly
