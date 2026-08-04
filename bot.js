@@ -924,19 +924,7 @@ async function processMessage(data) {
   // Also ignore any message that starts with our bot prefix
   if (content.startsWith('!meta') && username.toLowerCase().includes('sheepsync')) return;
 
-  // Stream sniper detection — ignore the streamer and mods/VIPs
-  const isStreamer = username.toLowerCase() === '5headnn';
-  if (!isStreamer && !isVIP && SNIPER_PATTERNS.some(p => p.test(content))) {
-    const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
-    await sendChatMessage(roast, username);
-    console.log(`🎯 Sniper detected: ${username}`);
-    // Alert Discord mods
-    try {
-      const discord = require('./discord');
-      if (discord.alertSniper) await discord.alertSniper(username, content);
-    } catch(e) {}
-    return;
-  }
+  // Stream sniper detection — moved below badge detection so isVIP is defined
 
   // Incoming raid detection via chat system message
   const raidMatch = content.match(/^(.+?)\s+is raiding with\s+(\d+)/i) ||
@@ -972,6 +960,19 @@ async function processMessage(data) {
   const isVIP = isOwner || badges.some(b => b.type === 'vip' || b.type === 'moderator' || b.type === 'broadcaster');
   const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'og' || b.type === 'founder');
   const userStatus = isVIP ? '[VIP]' : isSub ? '[SUB]' : '[VIEWER]';
+
+  // Stream sniper detection — ignore the streamer and mods/VIPs
+  const isStreamer = username.toLowerCase() === '5headnn';
+  if (!isStreamer && !isVIP && SNIPER_PATTERNS.some(p => p.test(content))) {
+    const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
+    await sendChatMessage(roast, username);
+    console.log(`🎯 Sniper detected: ${username}`);
+    try {
+      const discord = require('./discord');
+      if (discord.alertSniper) await discord.alertSniper(username, content);
+    } catch(e) {}
+    return;
+  }
 
   // Link filter — now after badge detection so isVIP/isSub are defined
   const hasLink = /https?:\/\/|www\.|\.com|\.io|\.gg|\.tv|\.net|\.org/i.test(content);
