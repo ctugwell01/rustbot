@@ -1239,7 +1239,18 @@ async function processMessage(data) {
         const headers = tok
           ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
           : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
-        const res = await fetch(`https://api.kick.com/public/v1/clips?broadcaster_user_login=${CONFIG.channelSlug}&sort=view_count&first=1`, { headers });
+        // Try multiple clip endpoint formats
+        const clipEndpoints = [
+          `https://api.kick.com/public/v1/clips?broadcaster_user_login=${CONFIG.channelSlug}&sort=view_count&first=1`,
+          `https://api.kick.com/public/v1/clips?channel_slug=${CONFIG.channelSlug}&first=1`,
+          `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/clips?first=1`,
+        ];
+        let res = null;
+        for (const endpoint of clipEndpoints) {
+          res = await fetch(endpoint, { headers });
+          if (res.ok) break;
+          console.log(`Clip endpoint failed: ${endpoint} → ${res.status}`);
+        }
         if (res.ok) {
           const data = await res.json();
           const clip = data?.data?.[0];
