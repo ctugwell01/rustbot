@@ -1232,41 +1232,27 @@ async function processMessage(data) {
       return;
     }
 
-    // !clip — fetch latest Kick clip dynamically
+    // !clip — fetch latest Kick clip via Captapi
     if (cmdLower === '!clip') {
       try {
-        const tok = await getToken();
-        const headers = tok
-          ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
-          : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
-        // Try multiple clip endpoint formats
-        const clipEndpoints = [
-          `https://api.kick.com/public/v1/clips?broadcaster_user_login=${CONFIG.channelSlug}&sort=view_count&first=1`,
-          `https://api.kick.com/public/v1/clips?channel_slug=${CONFIG.channelSlug}&first=1`,
-          `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/clips?first=1`,
-        ];
-        let res = null;
-        for (const endpoint of clipEndpoints) {
-          res = await fetch(endpoint, { headers });
-          if (res.ok) break;
-          console.log(`Clip endpoint failed: ${endpoint} → ${res.status}`);
-        }
-        if (res.ok) {
-          const data = await res.json();
-          const clip = data?.data?.[0];
-          if (clip) {
-            const clipUrl = clip.clip_url || clip.url || `https://kick.com/${CONFIG.channelSlug}?clip=${clip.id}`;
-            const clipTitle = clip.title || 'Latest clip';
-            await sendChatMessage(`🎬 Latest clip: "${clipTitle}" — ${clipUrl}`, username);
+        const captapiKey = process.env.CAPTAPI_KEY;
+        if (captapiKey) {
+          const res = await fetch(`https://api.captapi.com/v1/kick/clip?url=https://kick.com/${CONFIG.channelSlug}&limit=1`, {
+            headers: { 'Authorization': `Bearer ${captapiKey}`, 'Accept': 'application/json' }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const clip = data?.data?.clips?.[0];
+            if (clip) {
+              await sendChatMessage(`🎬 Latest clip: "${clip.title}" (${clip.views} views) — ${clip.url}`, username);
+              return;
+            }
           } else {
-            await sendChatMessage(`🎬 No clips yet — press C while watching to clip!`, username);
+            console.log(`Captapi clip failed: ${res.status} ${await res.text()}`);
           }
-        } else {
-          await sendChatMessage(`🎬 Press C while watching or hit the scissors icon to clip!`, username);
         }
-      } catch(e) {
-        await sendChatMessage(`🎬 Press C while watching or hit the scissors icon to clip!`, username);
-      }
+      } catch(e) { console.log('Clip fetch error:', e.message); }
+      await sendChatMessage(`🎬 Check 5HeadNN's clips: kick.com/5headnn?tab=clips — press C while watching to clip!`, username);
       return;
     }
 
