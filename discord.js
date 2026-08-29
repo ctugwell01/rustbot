@@ -251,16 +251,6 @@ client.once('ready', async () => {
       console.log(`📢 Live channel found: ${liveChannel.name}`);
       client.liveChannel = liveChannel;
     }
-    client.clipsChannel = guild.channels.cache.find(c =>
-      c.name === 'stream-clips' && c.isTextBased()
-    );
-    if (client.clipsChannel) console.log(`🎬 Clips channel found: ${client.clipsChannel.name}`);
-
-    client.subsChannel = guild.channels.cache.find(c =>
-      c.name === 'subs' && c.isTextBased()
-    );
-    if (client.subsChannel) console.log(`⭐ Subs channel found: ${client.subsChannel.name}`);
-
     const sniperChannel = guild.channels.cache.find(c =>
       c.name === 'snipers' && c.isTextBased()
     );
@@ -325,9 +315,8 @@ client.on('messageCreate', async (message) => {
   const isMention = message.mentions.users.has(client.user.id);
   const isCmd = content.startsWith('!');
 
-  // Spam detection — skip for mods and owner
-  const isMod = userStatus === '[MOD]' || userStatus === '[OWNER]';
-  if (!isMod && SPAM_PATTERNS.some(p => p.test(content))) {
+  // Spam detection
+  if (SPAM_PATTERNS.some(p => p.test(content))) {
     try {
       await message.delete();
       await message.channel.send(`${message.author} spam detected — get out of here NN`);
@@ -337,6 +326,7 @@ client.on('messageCreate', async (message) => {
   }
 
   // Link filter for NNs only — mods, boosters, VIPs can post links
+  const isMod = userStatus === '[MOD]' || userStatus === '[OWNER]';
   const hasLink = /https?:\/\/|www\./i.test(content);
   if (hasLink && !isPrivileged && !isMod && !isMention) {
     try {
@@ -505,71 +495,24 @@ setInterval(checkTikTok, 5 * 60 * 1000);
 setTimeout(checkTikTok, 10000);
 
 client.login(process.env.DISCORD_TOKEN);
-
-async function notifyFollow(username) {
-  const target = client.welcomeChannel || generalChannel;
-  if (!target) return;
+async function postClip(username, clipUrl) {
+  // Find clips channel or fall back to general
+  const guild = client.guilds.cache.get('1088905913550778380');
+  if (!guild) return;
+  const clipsChannel = guild.channels.cache.find(c => c.name === 'clips' && c.isTextBased()) || client.generalChannel;
+  if (!clipsChannel) return;
   try {
+    const { EmbedBuilder } = require('discord.js');
     const embed = new EmbedBuilder()
       .setColor(0x53fc18)
-      .setTitle('💜 New Follower!')
-      .setDescription(`**${username}** just followed the channel — welcome to the EvilSheep gang! 🐑`)
+      .setTitle('New Clip from 5HeadNN!')
+      .setDescription(`${username} shared a clip — go watch it!`)
+      .addFields({ name: 'Watch here', value: clipUrl })
       .setTimestamp()
-      .setFooter({ text: 'SheepSync' });
-    await target.send({ embeds: [embed] });
-    console.log(`💜 Follow notification sent for ${username}`);
-  } catch(e) { console.error('Follow notify error:', e.message); }
+      .setFooter({ text: 'SheepSync Clip Alert' });
+    await clipsChannel.send({ embeds: [embed] });
+    console.log(`🎬 Clip posted to Discord by ${username}`);
+  } catch(e) { console.error('Clip post error:', e.message); }
 }
 
-async function notifySub(username, months, gifted) {
-  const target = client.subsChannel || client.liveChannel || generalChannel;
-  if (!target) return;
-  try {
-    const isGift = gifted ? ' (gifted)' : '';
-    const monthsStr = months > 1 ? ` (${months} months)` : '';
-    const embed = new EmbedBuilder()
-      .setColor(0xFFD700)
-      .setTitle('⭐ New Sub — BIG CHAD ALERT!')
-      .setDescription(`**${username}** just subbed${monthsStr}${isGift}! Absolute legend 🐑`)
-      .setTimestamp()
-      .setFooter({ text: 'SheepSync' });
-    await target.send({ embeds: [embed] });
-    console.log(`⭐ Sub notification sent for ${username}`);
-  } catch(e) { console.error('Sub notify error:', e.message); }
-}
-
-async function notifyOwner(message) {
-  // DM the server owner when bot needs attention
-  try {
-    const guild = client.guilds.cache.first();
-    if (!guild) return;
-    const owner = await guild.fetchOwner();
-    if (owner) {
-      await owner.send(`🤖 **SheepSync Alert**\n${message}`);
-      console.log('📨 Owner notified via Discord DM');
-    }
-  } catch(e) { 
-    // Fallback: post in general channel
-    try {
-      if (generalChannel) await generalChannel.send(`🤖 **SheepSync Alert** — ${message}`);
-    } catch(e2) { console.error('Owner notify error:', e2.message); }
-  }
-}
-
-async function notifyClip(clipper, title, url) {
-  const target = client.clipsChannel || client.liveChannel || generalChannel;
-  if (!target) return;
-  try {
-    const embed = new EmbedBuilder()
-      .setColor(0x53fc18)
-      .setTitle('🎬 New Clip!')
-      .setDescription(`**${clipper}** just clipped **"${title}"**\n[Watch it here](${url})`)
-      .setURL(url)
-      .setTimestamp()
-      .setFooter({ text: 'SheepSync' });
-    await target.send({ embeds: [embed] });
-    console.log(`🎬 Clip notification sent: ${title}`);
-  } catch(e) { console.error('Clip notify error:', e.message); }
-}
-
-module.exports = { announceGoLive, alertSniper, notifyFollow, notifySub, notifyOwner, notifyClip };
+module.exports = { announceGoLive, alertSniper, postClip };
