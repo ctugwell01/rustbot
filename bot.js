@@ -120,7 +120,7 @@ const KICK_MOD = {
   redirectUri: 'https://rustbot-production.up.railway.app/mod-callback',
   authUrl: 'https://id.kick.com/oauth/authorize',
   tokenUrl: 'https://id.kick.com/oauth/token',
-  scopes: ['user:read', 'channel:read', 'events:subscribe', 'channel:write', 'moderation:ban'],
+  scopes: ['user:read', 'channel:read', 'events:subscribe', 'channel:write'],
 };
 
 let modTokens = null;
@@ -242,7 +242,7 @@ const AUTO_MESSAGES = [
   "use !predict to see if 5head wins his next fight, spoiler: the scripts decide",
   "enjoying the chaos? follow the channel and join the EvilSheep Discord: https://discord.gg/4DHRdH9dz5",
   "subs are big chads. NNs are NNs. the choice is yours lads",
-  () => `tip goal: £${subGoal.current}/£${subGoal.target} raised — help 5HeadNN buy his mum an AC unit before summer! donate with !donate 🐑`,
+  () => `sub goal: ${subGoal.current}/${subGoal.target} — ${subGoal.target - subGoal.current} to go in ${subGoal.deadline}! become a big chad and help 5head hit it`,
 ];
 
 // ─────────────────────────────────────────
@@ -333,24 +333,17 @@ async function refreshTokens() {
     if (data.access_token) {
       saveTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
       console.log('🔄 Tokens refreshed!');
-      isRefreshing = false;
       return true;
     }
-    console.error('❌ Refresh failed — clearing tokens, re-auth required:', data);
-    tokens = null;
+    console.error('❌ Refresh failed:', data);
     isRefreshing = false;
-    // Notify via Discord so you don't need to check Railway URL
-    try {
-      const d = require('./discord');
-      const authLink = `https://rustbot-production.up.railway.app`;
-      if (d.notifyOwner) d.notifyOwner(`⚠️ SheepSync needs re-auth! Kick tokens expired.\nClick to re-authorize: ${authLink}`).catch(()=>{});
-    } catch(e) {}
     return false;
   } catch(e) {
     console.error('❌ Refresh error:', e.message);
     isRefreshing = false;
     return false;
   }
+  isRefreshing = false;
 }
 
 async function getToken() {
@@ -369,17 +362,7 @@ setInterval(refreshTokens, 10 * 60 * 1000); // Refresh every 10 minutes
 setInterval(async () => {
   if (!tokens) return;
   const timeLeft = tokens.expires_at - Date.now();
-  if (timeLeft < 0) {
-    // Token is already expired — try once then clear if it fails
-    console.log(`⚠️ Token expired ${Math.abs(Math.floor(timeLeft/60000))} mins ago — attempting refresh...`);
-    const ok = await refreshTokens();
-    if (!ok) {
-      console.log('⚠️ Refresh failed — clearing stale tokens. Re-auth at your Railway URL.');
-      tokens = null;
-    }
-    return;
-  }
-  if (timeLeft < 10 * 60 * 1000) {
+  if (timeLeft < 10 * 60 * 1000) { // Less than 10 mins left
     console.log(`⏱️ Token has ${Math.floor(timeLeft/60000)} mins left — refreshing...`);
     await refreshTokens();
   }
@@ -437,7 +420,7 @@ async function sendChatMessage(message, replyTo = null) {
 const SNIPER_PATTERNS = [
   /imma? (snipe|find|come|hunt) (you|u|him)/i,
   /i('?m| am) (gonna |going to )?(snipe|find|come|hunt) (you|u|him)/i,
-  /stream snip(ing|er|ped|ping) (you|u|him|5head)/i,  // must target 5head specifically
+  /stream snip/i,
   /i found (you|u|him)/i,
   /coming for (you|u|him)/i,
   /tell me (the )?server/i,
@@ -459,22 +442,12 @@ const SNIPER_ROASTS = [
 const SPAM_PATTERNS = [
   /n[\s\W]*e[\s\W]*z[\s\W]*h[\s\W]*n[\s\W]*a/i,
   /\w+[\s\W]*\.[\s\W]*c[\s\W]*o[\s\W]*m/i,
-  /discord\.gg\/[a-zA-Z0-9]+/i,        // actual discord invite links only
+  /discord\s*[;:.]?\s*\w+#?\d*/i,
   /add me on discord/i,
-  /add me on/i,
-  /stay connected/i,
-  /feel free to add/i,
-  /to stay connected/i,
-  /let.?s chat on discord/i,
-  /chat on discord/i,
-  /dm me on discord/i,
-  /message me on discord/i,
-  /find me on discord/i,
-  /don.?t want to spam.{0,30}discord/i,
   /become your (dedicated|loyal) fan/i,
-  /support.*your.*discord/i,
-  /grow.*discord/i,
-  // /follow me/ removed — too broad, catches innocent messages
+  /support you.*discord/i,
+  /discord.*support/i,
+  /follow me/i,
   /check out my (channel|stream|profile)/i,
   /(onlyfans|cashapp|paypal\.me)/i,
   /5naies/i,
@@ -509,7 +482,7 @@ const SPAM_PATTERNS = [
   /\|\s*tg\s*:/i,
   /via\s+customizable/i,
   /let\s+collab(orate)?/i,
-  /join\s+my\s+discord/i,
+  /add\s+me\s+(up\s+)?on\s+discord/i,
   /am\s+also\s+a\s+streamer/i,
   /i.m\s+also\s+a\s+streamer/i,
   /also\s+a\s+streamer/i,
@@ -518,85 +491,26 @@ const SPAM_PATTERNS = [
   /follow\s+for\s+follow/i,
   /f4f/i,
   /sub\s+for\s+sub/i,
-  /remove\\s+space/i,
-  /keep\\s+(the\\s+)?chat\\s+alive/i,
-  /grow\\s+your\\s+audience/i,
-  /stream\\s+more\\s+active/i,
-  /help\\s+you\\s+grow/i,
-  /bots?\\s+keep/i,
-  /ai\\s+bots?\\s+(keep|help|grow)/i,
-  /instant\s+kick\s+vote/i,
-  /view\s*b[o0]t/i,
-  /viewb[o0]t/i,
-  /b[o0]t\s*&?\s*p[o0]ll/i,
-  /kick\s+vote\s+b/i,
-  /free\s+(view|follow|sub)/i,
-  /get\s+(more\s+)?(view|follow|sub)/i,
-  /increase\s+your\s+(view|follow)/i,
-  /boost\s+your\s+(stream|channel|view)/i,
-  /smm\s*panel/i,
-  /buy\s+(view|follow|sub)/i,
-  /cheapest.{0,20}(bot|follow|view|sub)/i,
-  /legit.{0,20}(follower|view).{0,10}bot/i,
-  /follower\s+bot/i,
-  /own\s*kick/i,
-  /ownkick/i,
-  // IP tracking threats
-  /track(ing)?.{0,20}(ip|location|address)/i,
-  /i.ll.{0,10}(find|track|locate|dox) you/i,
-  /dox(x(ing)?)?/i,
-  /your.{0,10}ip.{0,10}(is|address)/i,
-  // Racial slurs — catch common obfuscations
-  /n[i1!|\*]+[g9]+[g9]+[e3]*[r]*/i,
-  /n[i!1]+gg/i,
-  /nigg/i,
-  /tired\s+of\s+streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
-  /streaming\s+to\s+(zero|0|1)\s*(view|viewer)?/i,
-  /tired\s+of\s+(zero|0|1)\s*(view|viewer)/i,
-  /are\s+you\s+tired\s+of/i,
-  /let.?s\s+change\s+that/i,
-  /nezhna/i,
 ];
 
 function normalizeText(text) {
-  // Small caps unicode -> normal letters
-  const smallCapsMap = {
-    'ᴀ':'a','ʙ':'b','ᴄ':'c','ᴅ':'d','ᴇ':'e','ꜰ':'f','ɢ':'g','ʜ':'h','ɪ':'i',
-    'ᴊ':'j','ᴋ':'k','ʟ':'l','ᴍ':'m','ɴ':'n','ᴏ':'o','ᴘ':'p','ǫ':'q','ʀ':'r',
-    'ꜱ':'s','ᴛ':'t','ᴜ':'u','ᴠ':'v','ᴡ':'w','x':'x','ʏ':'y','ᴢ':'z',
-    'ᴬ':'a','ᴮ':'b','ᴰ':'d','ᴱ':'e','ᴳ':'g','ᴴ':'h','ᴵ':'i','ᴶ':'j',
-    'ᴷ':'k','ᴸ':'l','ᴹ':'m','ᴺ':'n','ᴼ':'o','ᴾ':'p','ᴿ':'r','ᵀ':'t',
-    'ᵁ':'u','ᵂ':'w',
-  };
-  text = text.split('').map(c => smallCapsMap[c] || c).join('');
-
+  // Replace unicode lookalike characters with ASCII equivalents
   return text
-    .replace(/[оοооο𝐨𝗼𝘰𝙤𝚘]/g, 'o')
-    .replace(/[ааа𝐚𝗮𝘢]/g, 'a')
-    .replace(/[ссс𝐜]/g, 'c')
+    .replace(/[оοооο]/g, 'o')
+    .replace(/[ааа]/g, 'a')
+    .replace(/[ссс]/g, 'c')
     .replace(/[ррр]/g, 'r')
-    .replace(/[еее𝐞𝗲]/g, 'e')
-    .replace(/[ііі𝐢]/g, 'i')
+    .replace(/[еее]/g, 'e')
+    .replace(/[ііі]/g, 'i')
     .replace(/[ккк]/g, 'k')
     .replace(/[ոﭓ]/g, 'n')
     .replace(/[դ]/g, 'd')
+    .replace(/[Ա-Ֆա-և]/g, c => c) // Armenian
     .replace(/[ԝԝ]/g, 'w')
     .replace(/[ϲϲ]/g, 'c')
-    .replace(/[𝐝𝗱𝘥]/g, 'd')
-    .replace(/[𝐟𝗳]/g, 'f')
-    .replace(/[𝐦𝗺]/g, 'm')
-    .replace(/[𝐬𝘀]/g, 's')
-    .replace(/[𝐭𝘁]/g, 't')
-    .replace(/[𝐰𝘄]/g, 'w')
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase();
-}
-
-function hasSmallCaps(text) {
-  // Detect if message uses small caps unicode — common spam evasion
-  const smallCapsChars = /[ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢ]/;
-  return smallCapsChars.test(text);
 }
 
 function isSpamAdvanced(text) {
@@ -621,12 +535,6 @@ function isSpamAdvanced(text) {
   if (normalized.includes('cheapest') && normalized.includes('bot')) return true;
   if (normalized.includes('custom') && normalized.includes('username') && normalized.includes('bot')) return true;
   
-  // Small caps + any social/promo keyword = spam evasion attempt
-  if (hasSmallCaps(text)) {
-    const promoKeywords = ['discord', 'follow', 'kick', 'stream', 'add me', 'connected', 'tag', 'dm', 'check out'];
-    if (promoKeywords.some(k => normalized.includes(k))) return true;
-  }
-
   return SPAM_PATTERNS.some(p => p.test(text)) || SPAM_PATTERNS.some(p => p.test(normalized));
 }
 
@@ -660,131 +568,112 @@ async function deleteMessage(messageId) {
   }
 }
 
-async function lookupUserId(username, token) {
-  // Check cache first — populated from chat messages
-  const cached = userIdCache[username.toLowerCase()];
-  if (cached) { console.log(`🔍 ${username} → user_id ${cached} (from cache)`); return cached; }
-  
-  // Try multiple endpoints to find user ID
-  const endpoints = [
-    `https://api.kick.com/public/v1/users?username=${encodeURIComponent(username)}`,
-    `https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(username.toLowerCase())}`,
-  ];
-  
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const userId = data?.data?.[0]?.user_id || data?.data?.[0]?.id || 
-                       data?.data?.id || data?.data?.[0]?.broadcaster_user_id;
-        if (userId) { 
-          console.log(`🔍 Resolved ${username} → user_id ${userId}`);
-          userIdCache[username.toLowerCase()] = userId; // Cache for future
-          return userId; 
-        }
-      }
-    } catch(e) { console.error('User lookup error:', e.message); }
-  }
-  return null;
-}
-
-async function banUser(username, messageId = null, reason = 'Spam') {
+async function banUser(username, messageId = null) {
+  const token = await getToken();
+  if (!token) return;
+  // Delete their message first
   if (messageId) await deleteMessage(messageId);
   try {
+    // Try all known Kick ban endpoint formats
+    const banAttempts = [
+      {
+        url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`,
+        body: { banned_user: { username }, permanent: true, reason: 'Spam' }
+      },
+      {
+        url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`,
+        body: { banned_user: { username }, permanent: true, reason: 'Spam' }
+      },
+      {
+        url: `https://api.kick.com/public/v1/moderation/bans`,
+        body: { broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, permanent: true }
+      },
+    ];
+
+    // Try mod token first (5headnn account) with multiple endpoint formats
     const modToken = await getModToken();
-    const token = await getToken();
-    const useToken = modToken || token;
-    if (!useToken) { console.error('No token available for ban'); return; }
-
-    // Look up numeric user_id from cache or API
-    const userId = await lookupUserId(username, useToken);
-
-    // Working format confirmed: user_id + broadcaster_user_id + reason as integers
-    if (userId) {
-      try {
-        const body = { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason };
-        const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (res.ok) { console.log(`🔨 Banned ${username} via moderation API`); return; }
-        else { console.error(`Ban failed → ${res.status}:`, JSON.stringify(data)); }
-      } catch(e) { console.error('Ban error:', e.message); }
+    if (modToken) {
+      const modBanAttempts = [
+        { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: true, reason: 'Spam' } },
+        { url: `https://api.kick.com/public/v1/channels/${CONFIG.channelSlug}/bans`, body: { banned_user: { username }, permanent: true, reason: 'Spam' } },
+        { url: `https://api.kick.com/public/v1/channels/${CONFIG.chatroomId}/bans`, body: { banned_user: { username }, permanent: true } },
+        { url: `https://api.kick.com/public/v1/chatrooms/${CONFIG.chatroomId}/bans`, body: { username, permanent: true } },
+        { url: `https://api.kick.com/public/v1/moderation/channels/${CONFIG.broadcasterId}/bans`, body: { username, permanent: true } },
+      ];
+      for (const attempt of modBanAttempts) {
+        try {
+          const res = await fetch(attempt.url, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${modToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(attempt.body),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            console.log(`🔨 Banned via mod token: ${username} (${attempt.url})`);
+            return;
+          } else {
+            console.error(`Mod ban failed (${attempt.url}):`, JSON.stringify(data));
+          }
+        } catch(e) { console.error('Mod ban error:', e.message); }
+      }
     }
 
-    // Fallback: try with username directly
-    const fallbacks = [
-      { url: 'https://api.kick.com/public/v1/moderation/bans', body: { broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, reason } },
-      { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: true, reason } },
-    ];
     let banned = false;
-    for (const attempt of fallbacks) {
+    for (const attempt of banAttempts) {
       try {
         const res = await fetch(attempt.url, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(attempt.body),
         });
-        if (res.ok) { console.log(`🔨 Banned ${username} via ${attempt.url}`); banned = true; break; }
-        else { const d = await res.json(); console.error(`Ban fallback failed (${attempt.url}):`, JSON.stringify(d)); }
-      } catch(e) { console.error('Ban fallback error:', e.message); }
+        const data = await res.json();
+        if (res.ok) {
+          console.log(`🔨 Banned: ${username} via ${attempt.url}`);
+          banned = true;
+          break;
+        } else {
+          console.error(`Ban failed (${attempt.url}):`, data);
+        }
+      } catch(e) { console.error('Ban error:', e.message); }
     }
-    if (!banned) {
-      // Final fallback — send /ban as chat command (works if SheepSyncBot is a mod)
+    
+    // Fallback: use streamer session token
+    if (!banned && process.env.KICK_AUTH_TOKEN) {
       try {
-        console.log(`⚡ Trying /ban chat command for ${username}`);
-        await sendChatMessage(`/ban ${username} Spam`);
-        console.log(`🔨 Sent /ban ${username} via chat command`);
-      } catch(e) { console.error('Chat ban error:', e.message); }
+        const res = await fetch(`https://kick.com/api/v2/chatrooms/${CONFIG.chatroomId}/bans`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.KICK_AUTH_TOKEN}`,
+            'X-XSRF-TOKEN': process.env.KICK_XSRF_TOKEN || '',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Referer': 'https://kick.com',
+            'User-Agent': 'Mozilla/5.0',
+            'Cookie': `session_token=${process.env.KICK_AUTH_TOKEN}; XSRF-TOKEN=${process.env.KICK_XSRF_TOKEN}`,
+          },
+          body: JSON.stringify({ banned_username: username, permanent: true, reason: 'Spam' }),
+        });
+        const text = await res.text();
+        if (res.ok) {
+          console.log(`🔨 Banned via session: ${username}`);
+          banned = true;
+        } else {
+          console.error('Session ban failed:', res.status, text.substring(0, 100));
+        }
+      } catch(e) { console.error('Session ban error:', e.message); }
     }
+    
+    if (!banned) console.error(`❌ All ban attempts failed for ${username}`);
   } catch(e) { console.error('Ban error:', e.message); }
 }
 
-async function timeoutUser(username, duration = 600, reason = 'timed out') {
-  const modToken = await getModToken();
-  const token = await getToken();
-  const useToken = modToken || token;
-  if (!useToken) return;
-  // Convert seconds to minutes for Kick API (max 10080 mins = 7 days)
-  const durationMins = Math.min(Math.ceil(duration / 60), 10080);
-  const userId = await lookupUserId(username, useToken);
-  try {
-    if (userId) {
-      const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ broadcaster_user_id: String(CONFIG.broadcasterId), user_id: String(userId), duration: durationMins, reason }),
-      });
-      if (res.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); return; }
-      else { const d = await res.json(); console.error('Timeout failed:', JSON.stringify(d)); }
-    }
-    // Fallback without user_id
-    const res2 = await fetch('https://api.kick.com/public/v1/moderation/bans', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ broadcaster_user_id: String(CONFIG.broadcasterId), username, duration: durationMins, reason }),
-    });
-    if (res2.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); }
-    else { const d = await res2.json(); console.error('Timeout fallback failed:', JSON.stringify(d)); }
-  } catch(e) { console.error('Timeout error:', e.message); }
-}
-
 const ROAST_RESPONSES = [
-  "oh well, that's another shitter gone 🐑",
-  "another one bites the dust. chat stays clean lads",
-  "🚫 gone. next.",
-  "and another one gone 👋 EvilSheep don't play",
-  "chat security working overtime today innit",
-  "see ya, wouldn't wanna be ya 🗑️",
-  "cleaned that up quick. where were we lads",
-  "nah we don't do that here. gone.",
-  "one less idiot in chat, you're welcome 🐑",
-  "right, who else wants to try it",
+  "get this bot out of here 🗑️ banned.",
+  "spam detected, you're gone. touch grass.",
+  "lmaooo another bot 💀 see ya never.",
+  "bro really thought that would work here 😭 banned.",
+  "the audacity. banned. deleted. gone.",
+  "not on my watch 🔨 get out.",
 ];
 
 // ─────────────────────────────────────────
@@ -846,7 +735,7 @@ PERSONALITY (use naturally, not every message):
 - Ask his settings = "ask his cheat provider"
 - 5Head = big brain meme, make head jokes occasionally
 - 5HeadNN ALWAYS stand sprays — never crouches, never moves, just stands there spraying. If anyone mentions his aim, movement or gunfight style make a stand spray joke like "why would he crouch he's built different" or "crouching is for the weak" or "stand spraying is a lifestyle choice"
-- 5HeadNN got falsely game banned 4 years ago and was eventually unbanned — it was a FALSE ban, NOT a VAC ban. This is part of his legendary lore. NEVER say VAC ban, always say game ban or false ban. If anyone brings up bans — confirm it proudly like it's a badge of honour. "yeah he got falsely banned, proved them wrong, and came back stronger" or "they tried to ban him, couldn't make it stick" or "false game ban couldn't hold him" 
+- 5HeadNN got VAC/game banned 4 years ago and was eventually unbanned. This is part of his legendary lore. If anyone brings up bans, cheating history or asks if he's ever been banned — confirm it proudly like it's a badge of honour. "yeah he got banned, came back, and is still cheating to this day" or "the ban couldn't hold him" or "they tried to stop him once, didn't work" 
 
 SPECIAL PEOPLE:
 - Kris is a legendary regular sub and personal friend of 5HeadNN. He owns and runs Combat Arena, the BEST Rust minigame server in the US. If anyone mentions Kris, big him up massively. If anyone asks about fun Rust servers, recommend Combat Arena. Combat Arena has: Counter Strike, BaseWars, Gun Game, Deathmatch, Capture the Flag, RiseUP, HexaDrop, Ranked 1v1, Duels, Battle Royale, King of The Hill, WarZone and Gambling. 1/150 players, custom map, wiped regularly.
@@ -876,11 +765,10 @@ function isCD(u) { const l = cooldowns.get(u); return l && Date.now() - l < CONF
 function setCD(u) { cooldowns.set(u, Date.now()); }
 
 // Sub goal tracker (update manually when subs change)
-let subGoal = { current: 77.63, target: 2000, deadline: 'before summer', label: 'tip goal' };
+let subGoal = { current: 12, target: 43, deadline: '2 weeks' };
 
 const STATIC = {
   '!discord': 'https://discord.gg/4DHRdH9dz5',
-  '!donate': '💰 Support 5HeadNN: https://streamlabs.com/5headnn1/tip — every donation helps keep the stand spray flowing!',
   '!goal': null, // handled dynamically
   '!subs': null, // handled dynamically
   '!socials': 'Kick: kick.com/5headnn | Discord: https://discord.gg/4DHRdH9dz5',
@@ -890,26 +778,15 @@ const STATIC = {
   '!drops': 'Drops begin on 11/13 make sure to visit https://kick.facepunch.com/ and follow the directions to get your free Rust skin!',
   '!evilsheep': 'Check out EvilSheep: https://evilsheep.io/',
   '!combatarena': 'Best Rust minigame server in the US — Combat Arena built by Kris himself. Go check it out!',
-  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict !donate !so',
+  '!clip': 'To clip the stream hit the scissors icon below the stream or press C on keyboard — share your clips in Discord!',
+  '!commands': '!raid !bp !meta !loot !wipe !farm !base !discord !lurk !cheat !drops !combatarena !clip !uptime !predict',
 };
 
 // ─────────────────────────────────────────
 //  PROCESS MESSAGE
 // ─────────────────────────────────────────
-let lastChatActivity = Date.now();
-let lastPusherActivity = Date.now();
-let watchdogActive = false;
-
-// Cache user IDs from chat messages so we can ban without API lookup
-const userIdCache = {};
-
 async function processMessage(data) {
   const username = data.sender?.username || '';
-  lastChatActivity = Date.now();
-  // Cache user ID from sender data (Kick includes it in chat events)
-  if (username && data.sender?.id) {
-    userIdCache[username.toLowerCase()] = data.sender.id;
-  }
   const content = data.content || '';
   // Ignore own messages and protected bot accounts
   const IGNORED_BOTS = ['sheepsyncbot', 'sheepsync', 'botrix', 'streamelements', 'nightbot', 'moobot'];
@@ -917,20 +794,38 @@ async function processMessage(data) {
   // Also ignore any message that starts with our bot prefix
   if (content.startsWith('!meta') && username.toLowerCase().includes('sheepsync')) return;
 
-  // Stream sniper detection — moved below badge detection so isVIP is defined
+  // Kick clip detection — hype it and post to Discord
+  if (content.includes('kick.com') && content.includes('/clips/')) {
+    const clipUrl = content.match(/https?:\/\/kick\.com\/\S+/i)?.[0] || content;
+    const clipMsg = await askClaude(`${username} just shared a clip from 5HeadNN stream. Hype it in chat Welsh Valleys style, 1 sentence.`);
+    if (clipMsg) await sendChatMessage(clipMsg);
+    try {
+      const discord = require('./discord');
+      if (discord.postClip) await discord.postClip(username, clipUrl);
+    } catch(e) {}
+    return;
+  }
 
-  // Incoming raid detection via chat system message
-  const raidMatch = content.match(/^(.+?)\s+is raiding with\s+(\d+)/i) ||
-                    content.match(/^(.+?)\s+raided\s+(?:the channel\s+)?with\s+(\d+)/i) ||
-                    content.match(/^(.+?)\s+has raided/i);
-  if (raidMatch && (data.sender?.is_staff || data.sender?.role === 'moderator' || username.toLowerCase() === 'kick')) {
-    const raiderName = raidMatch[1].trim();
-    const viewerCount = raidMatch[2] || '';
-    console.log(`🎉 Raid detected in chat from: ${raiderName}`);
-    const raidMsg = viewerCount
-      ? `OI OI massive shoutout to @${raiderName} for the raid with ${viewerCount} viewers — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`
-      : `OI OI massive shoutout to @${raiderName} for the raid — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`;
-    await sendChatMessage(raidMsg);
+  // Link filter — delete links from non-mods/non-subs
+  const hasLink = /https?:\/\/|www\.|\.com|\.io|\.gg|\.tv|\.net|\.org/i.test(content);
+  if (hasLink && !isVIP && !isSub) {
+    await deleteMessage(data.id || null);
+    await sendChatMessage(`links are for subs and mods only NN, get it deleted`, username);
+    console.log(`🔗 Link deleted from ${username}: ${content}`);
+    return;
+  }
+
+  // Stream sniper detection — ignore the streamer himself
+  const isStreamer = username.toLowerCase() === '5headnn';
+  if (!isStreamer && SNIPER_PATTERNS.some(p => p.test(content))) {
+    const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
+    await sendChatMessage(roast, username);
+    console.log(`🎯 Sniper detected: ${username}`);
+    // Alert Discord mods
+    try {
+      const discord = require('./discord');
+      if (discord.alertSniper) await discord.alertSniper(username, content);
+    } catch(e) {}
     return;
   }
 
@@ -938,11 +833,11 @@ async function processMessage(data) {
   const isRaid = await checkForRaid(username, content);
   if (isRaid) return;
 
-  // Spam / bot check — ban silently then post casual message
+  // Spam / bot check — ban and roast immediately
   if (isSpam(content) || isSpamAdvanced(content)) {
-    await banUser(username, data.id || null);
     const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
-    await sendChatMessage(roast, username); // @ them so chat knows who got banned
+    await sendChatMessage(roast, username);
+    await banUser(username, data.id || null);
     console.log(`🚫 Spam detected from ${username}: ${content}`);
     return;
   }
@@ -953,28 +848,6 @@ async function processMessage(data) {
   const isVIP = isOwner || badges.some(b => b.type === 'vip' || b.type === 'moderator' || b.type === 'broadcaster');
   const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'og' || b.type === 'founder');
   const userStatus = isVIP ? '[VIP]' : isSub ? '[SUB]' : '[VIEWER]';
-
-  // Stream sniper detection — ignore the streamer and mods/VIPs
-  const isStreamer = username.toLowerCase() === '5headnn';
-  if (!isStreamer && !isVIP && SNIPER_PATTERNS.some(p => p.test(content))) {
-    const roast = SNIPER_ROASTS[Math.floor(Math.random() * SNIPER_ROASTS.length)];
-    await sendChatMessage(roast, username);
-    console.log(`🎯 Sniper detected: ${username}`);
-    try {
-      const discord = require('./discord');
-      if (discord.alertSniper) await discord.alertSniper(username, content);
-    } catch(e) {}
-    return;
-  }
-
-  // Link filter — now after badge detection so isVIP/isSub are defined
-  const hasLink = /https?:\/\/|www\.|\.com|\.io|\.gg|\.tv|\.net|\.org/i.test(content);
-  if (hasLink && !isVIP && !isSub) {
-    await deleteMessage(data.id || null);
-    await sendChatMessage(`links are for subs and mods only NN`, username);
-    console.log(`🔗 Link deleted from ${username}: ${content}`);
-    return;
-  }
 
   console.log(`💬 [${username}] ${userStatus}: ${content}`);
   const lower = content.toLowerCase();
@@ -1008,32 +881,11 @@ async function processMessage(data) {
 
   if (isMention) {
     const question = content.replace(/@sheepsyncbot/gi, '').replace(/@sheepsync/gi, '').trim();
-
-    // ── MOD COMMANDS via @mention ──────────────────────────────
-    // Handle "remove @user" or "ban @user" BEFORE Claude sees it
-    const isModerator = isVIP || username.toLowerCase() === '5headnn';
-    const modCmdMatch = question.match(/^(remove|ban|timeout)\s+@?(\w+)(?:\s+(.+))?$/i);
-    if (modCmdMatch && isModerator) {
-      const action = modCmdMatch[1].toLowerCase();
-      const targetUser = modCmdMatch[2];
-      const reason = modCmdMatch[3] || 'removed by mod';
-      if (action === 'timeout') {
-        // Timeout for 10 minutes
-        await timeoutUser(targetUser, 600, reason);
-        await sendChatMessage(`${targetUser} timed out for 10 mins 🔇`, username);
-      } else {
-        await banUser(targetUser, null);
-        await sendChatMessage(`${targetUser} got the hammer 🔨`, username);
-      }
-      console.log(`🔨 Mod command: ${action} ${targetUser} by ${username}`);
-      return;
-    }
-    // ──────────────────────────────────────────────────────────
-
+    
     // Check for sub goal questions
     if (/how many subs|sub goal|subs left|subs to go|sub count|how close|how far/i.test(question)) {
       const remaining = subGoal.target - subGoal.current;
-      await sendChatMessage(`tip goal: £${subGoal.current}/£${subGoal.target} raised — helping 5HeadNN get his mum an AC unit before summer! use !donate to chip in 💰`, username);
+      await sendChatMessage(`${subGoal.current}/${subGoal.target} subs — ${remaining} to go in ${subGoal.deadline}! sub up and become a big chad`, username);
       setCD(username);
       return;
     }
@@ -1053,7 +905,7 @@ async function processMessage(data) {
 
     // !ban — manual ban command for streamer and mods
     if (cmdLower === '!ban') {
-      const isMod = username.toLowerCase() === '5headnn' || (data.sender?.is_moderator === true);
+      const isMod = isVIP || username.toLowerCase() === '5headnn';
       if (isMod && args) {
         const targetUser = args.split(' ')[0].replace('@', '');
         await sendChatMessage(`/ban ${targetUser} banned by mod`);
@@ -1066,7 +918,7 @@ async function processMessage(data) {
     // !goal / !subs — show sub goal
     if (cmdLower === '!goal' || cmdLower === '!subs') {
       const remaining = subGoal.target - subGoal.current;
-      await sendChatMessage(`tip goal: £${subGoal.current}/£${subGoal.target} raised — helping 5HeadNN get his mum an AC unit before summer! use !donate to chip in 💰`);
+      await sendChatMessage(`${subGoal.current}/${subGoal.target} subs — ${remaining} to go in ${subGoal.deadline}! sub to help 5head hit his goal, big chads only`);
       return;
     }
 
@@ -1079,54 +931,14 @@ async function processMessage(data) {
       return;
     }
 
-    // !golive — manually trigger live announcement (streamer only)
-    // !so @username — shoutout command (streamer and VIPs only)
-    if (cmdLower === '!so' || cmdLower === '!shoutout') {
-      const isMod = username.toLowerCase() === '5headnn' || (data.sender?.is_moderator === true);
-      if (isMod && args) {
-        const target = args.replace('@', '').trim();
-        try {
-          // Try to fetch their channel info for a better shoutout
-          const tok = await getToken();
-          const headers = tok
-            ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
-            : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
-          const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${target.toLowerCase()}`, { headers });
-          if (res.ok) {
-            const data = await res.json();
-            const channel = data?.data?.[0];
-            const category = channel?.category?.name || 'variety';
-            const isLive = !!(channel?.stream?.is_live || channel?.stream);
-            const viewers = channel?.stream?.viewer_count || 0;
-            const liveStr = isLive ? ` — they're LIVE right now with ${viewers} viewers!` : '';
-            const msg = `🐑 BIG shoutout to @${target}! Go show them some EvilSheep love — kick.com/${target.toLowerCase()} — playing ${category}${liveStr}`;
-            await sendChatMessage(msg, username);
-          } else {
-            await sendChatMessage(`🐑 BIG shoutout to @${target}! Go show them some EvilSheep love — kick.com/${target.toLowerCase()}`, username);
-          }
-        } catch(e) {
-          await sendChatMessage(`🐑 BIG shoutout to @${target}! Go show them some EvilSheep love — kick.com/${target.toLowerCase()}`, username);
-        }
-      }
-      return;
-    }
-
-    if (cmdLower === '!golive' && username.toLowerCase() === '5headnn') {
-      goLiveFired = false; // Reset lock so it fires
-      await handleGoLive();
-      return;
-    }
-
-    // !setgoal — set tip goal (streamer only). Usage: !setgoal 38.76  OR  !setgoal 38.76/1550
+    // !setgoal — set new goal (streamer only)  
     if (cmdLower === '!setgoal' && username.toLowerCase() === '5headnn') {
       const parts = args.split('/');
-      const newCurrent = parseFloat(parts[0]);
-      if (!isNaN(newCurrent)) subGoal.current = newCurrent;
       if (parts.length === 2) {
-        const newTarget = parseFloat(parts[1]);
-        if (!isNaN(newTarget)) subGoal.target = newTarget;
+        subGoal.current = parseInt(parts[0]) || subGoal.current;
+        subGoal.target = parseInt(parts[1]) || subGoal.target;
+        await sendChatMessage(`sub goal set to ${subGoal.current}/${subGoal.target}!`);
       }
-      await sendChatMessage(`tip goal updated: £${subGoal.current}/£${subGoal.target}!`);
       return;
     }
 
@@ -1232,30 +1044,6 @@ async function processMessage(data) {
       return;
     }
 
-    // !clip — fetch latest Kick clip via Captapi
-    if (cmdLower === '!clip') {
-      try {
-        const captapiKey = process.env.CAPTAPI_KEY;
-        if (captapiKey) {
-          const res = await fetch(`https://api.captapi.com/v1/kick/clip?url=https://kick.com/${CONFIG.channelSlug}&limit=1`, {
-            headers: { 'Authorization': `Bearer ${captapiKey}`, 'Accept': 'application/json' }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const clip = data?.data?.clips?.[0];
-            if (clip) {
-              await sendChatMessage(`🎬 Latest clip: "${clip.title}" (${clip.views} views) — ${clip.url}`, username);
-              return;
-            }
-          } else {
-            console.log(`Captapi clip failed: ${res.status} ${await res.text()}`);
-          }
-        }
-      } catch(e) { console.log('Clip fetch error:', e.message); }
-      await sendChatMessage(`🎬 Check 5HeadNN's clips: kick.com/5headnn?tab=clips — press C while watching to clip!`, username);
-      return;
-    }
-
     if (STATIC[cmdLower]) { await sendChatMessage(STATIC[cmdLower], username); return; }
     setCD(username);
     const r = await askClaude(`${userStatus} viewer ${username} asked: ${args ? `${cmd} ${args}` : cmd}`);
@@ -1278,13 +1066,13 @@ async function processMessage(data) {
     }
   }
 
-  // Respond if toxic towards 5head or general trash talk directed at the stream
-  const is5headInsult = lower.match(/\b(5head|5headnn|streamer|u|you|he|him)\b/) && 
-    lower.match(/\b(suck|bad|trash|garbage|noob|terrible|awful|worst|crap|dogshit|ass|boring|shit)\b/);
+  // Only respond if toxic towards 5head
+  const is5headInsult = lower.match(/\b(5head|5headnn|streamer)\b/) && 
+    lower.match(/\b(bad|trash|garbage|noob|nn|sucks|terrible|awful|dogsh|garbage|worst|crap|cheater|hacker)\b/);
   
-  if (is5headInsult && Math.random() < 0.7) { 
+  if (is5headInsult) { 
     setCD(username); 
-    const r = await askClaude(`${userStatus} viewer ${username} is being toxic in the chat saying: "${content}". If it's directed at 5HeadNN or the stream, defend hard in Welsh Valleys degen style. Short and spicy, max 1 sentence.`); 
+    const r = await askClaude(`${userStatus} viewer ${username} is being toxic about 5HeadNN saying: "${content}". Defend 5head in Welsh Valleys degen style, call them a NN if not subbed. Short and spicy.`); 
     if (r) await sendChatMessage(r, username); 
   }
 }
@@ -1292,15 +1080,7 @@ async function processMessage(data) {
 // ─────────────────────────────────────────
 //  GO LIVE HANDLER
 // ─────────────────────────────────────────
-let goLiveFired = false;
-let goLiveTimeout = null;
-
 async function handleGoLive() {
-  if (goLiveFired) return; // Already announced, ignore duplicate triggers
-  goLiveFired = true;
-  // Reset after 10 minutes so it can fire again if stream restarts
-  clearTimeout(goLiveTimeout);
-  goLiveTimeout = setTimeout(() => { goLiveFired = false; }, 10 * 60 * 1000);
   streamStartTime = Date.now();
   console.log('🟢 Firing go live handler!');
   try { await announceGoLive(); } catch(e) { console.error('Discord announce error:', e.message); }
@@ -1324,36 +1104,18 @@ function connectToKick() {
 
   // Sub / gift sub events — bind multiple possible event names
   const handleSubEvent = async (data) => {
-    // Log raw data so we can see what Kick actually sends
-    console.log('📦 Sub event raw data:', JSON.stringify(data).substring(0, 300));
-    // Skip empty events (fired on startup with no data)
-    if (!data || Object.keys(data).length === 0) { console.log('⚠️ Empty sub event — skipping'); return; }
-    const username = data.username || data.user?.username || data.subscriber?.username || 
-                     data.subscriber_username || data.display_name || data.name || null;
-    if (!username) { console.log('⚠️ Sub event has no username — skipping (will be caught by webhook instead)'); return; }
-    const months = data.months || data.months_subscribed || data.streak_months || 1;
-    const isGift = data.is_gift || data.gifted || false;
-    const gifter = data.gifter_username || data.gifted_by?.username || data.gifter?.username || null;
-
-    // Gift bomb — someone gifted multiple subs at once
-    const quantity = data.quantity || data.gifted_quantity || data.number_of_gifts || 0;
-    if (quantity > 1) {
-      const gifterName = username; // For gift bombs, username IS the gifter
-      console.log(`🎁 Gift bomb: ${gifterName} gifted ${quantity} subs!`);
-      const msg = await askClaude(`${gifterName} just gifted ${quantity} subs to the community — absolute MEGA CHAD energy! Hype them up massively, welcome the new EvilSheep members (spelled E-V-I-L-S-H-E-E-P). Make it huge, 2-3 sentences max.`);
-      if (msg) await sendChatMessage(msg);
-      subGoal.current = Math.min(subGoal.current + quantity, subGoal.target);
-      try { const d = require('./discord'); if (d.notifySub) d.notifySub(`${gifterName} (x${quantity} gift bomb)`, months, true).catch(console.error); } catch(e) {}
-      return;
-    }
+    const username = data.username || data.user?.username || 'Someone';
+    const months = data.months || 1;
+    const isGift = data.is_gift || false;
+    const gifter = data.gifter_username || null;
 
     let msg = '';
     if (isGift && gifter) {
-      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). Make it hype and fun. 2 sentences max.`);
+      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} as an official EvilSheep member. Make it hype and fun. 2 sentences max.`);
     } else if (months > 1) {
       msg = await askClaude(`${username} just resubbed for ${months} months. Call them a big chad and remind them they are a loyal EvilSheep member. 2 sentences max.`);
     } else {
-      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). High energy, 2 sentences max.`);
+      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them as an official EvilSheep member. High energy, 2 sentences max.`);
     }
     if (msg) await sendChatMessage(msg);
     // Auto increment sub counter
@@ -1362,7 +1124,6 @@ function connectToKick() {
       console.log(`📊 Sub goal updated: ${subGoal.current}/${subGoal.target}`);
     }
     console.log(`🎉 Sub event: ${username} (${months} months, gift: ${isGift})`);
-    try { const d = require('./discord'); if (d.notifySub) d.notifySub(username, months, isGift).catch(console.error); } catch(e) {}
   };
 
   // Bind all possible sub event names Kick might use
@@ -1384,7 +1145,6 @@ function connectToKick() {
 
   // Log ALL chatroom events
   chatRoom.bind_global((eventName, data) => {
-    lastPusherActivity = Date.now(); // Watchdog: track Pusher activity
     if (!eventName.includes('pusher')) {
       console.log(`📡 Chatroom event: ${eventName} | ${JSON.stringify(data).substring(0, 100)}`);
     }
@@ -1400,88 +1160,15 @@ function connectToKick() {
     if (eventName.includes('Subscription') || eventName.includes('subscription') || eventName.includes('Gift') || eventName.includes('gift')) {
       handleSubEvent(data).catch(console.error);
     }
-    // Handle clip created events
-    if (eventName.includes('Clip') || eventName.includes('clip')) {
-      const clipTitle = data?.clip?.title || data?.title || 'New clip';
-      const clipUrl = data?.clip?.url || data?.url || data?.clip_url || `https://kick.com/${CONFIG.channelSlug}?clips`;
-      const clipper = data?.clip?.created_by?.username || data?.created_by?.username || data?.username || 'Someone';
-      console.log(`🎬 Clip created by ${clipper}: ${clipTitle}`);
-      // Post in Discord
-      try {
-        const d = require('./discord');
-        if (d.notifyClip) d.notifyClip(clipper, clipTitle, clipUrl).catch(console.error);
-      } catch(e) {}
-      // Thank them in chat
-      sendChatMessage(`🎬 ${clipper} just clipped "${clipTitle}" — nice one! ${clipUrl}`).catch(console.error);
-    }
-
-    // Handle incoming raid events
-    if (eventName.includes('Raid') || eventName.includes('raid') || eventName.includes('Host') || eventName.includes('host')) {
-      const raiderName = data?.host_username || data?.raider?.username || data?.from_channel || data?.username || 'someone';
-      const viewerCount = data?.viewers || data?.viewer_count || data?.number || '';
-      console.log(`🎉 Incoming raid from: ${raiderName} with ${viewerCount} viewers`);
-      
-      // Welcome message in chat
-      const raidMsg = viewerCount
-        ? `OI OI massive shoutout to @${raiderName} for the raid with ${viewerCount} viewers — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`
-        : `OI OI massive shoutout to @${raiderName} for the raid — absolute BIG CHAD energy 🐑 EvilSheep welcomes you all!`;
-      sendChatMessage(raidMsg).catch(console.error);
-
-      // Auto-shoutout — look up their channel and post info
-      setTimeout(async () => {
-        try {
-          const tok = await getToken();
-          const headers = tok
-            ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
-            : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
-          const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${raiderName.toLowerCase()}`, { headers });
-          if (res.ok) {
-            const d = await res.json();
-            const channel = d?.data?.[0];
-            const category = channel?.category?.name || 'variety';
-            const soMsg = `🐑 go show @${raiderName} some love — kick.com/${raiderName.toLowerCase()} — they play ${category}`;
-            await sendChatMessage(soMsg);
-          }
-        } catch(e) {}
-      }, 5000); // Wait 5s after welcome message
-
-      // Discord notification
-      try {
-        const d = require('./discord');
-        if (d.notifyOwner) d.notifyOwner(`🎉 Incoming raid from **${raiderName}**${viewerCount ? ` with ${viewerCount} viewers` : ''}!`).catch(()=>{});
-      } catch(e) {}
-    }
-
-    // Handle follow events
-    if (eventName.includes('Follow') || eventName.includes('follow')) {
-      const followerName = data?.user?.username || data?.username || data?.followed_by || 'someone';
-      console.log(`💜 New follower: ${followerName}`);
-      const followResponses = [
-        `@${followerName} welcome to the EvilSheep gang! 🐑 you're one of us now`,
-        `@${followerName} just followed — smart move lad, pull up a chair`,
-        `@${followerName} has joined the EvilSheep gang 🐑 stand sprayers only from here`,
-        `@${followerName} welcome in! don't ask about the monitor refresh rate`,
-        `@${followerName} followed — another one lost to the most sus Rust channel on Kick`,
-        `oi oi @${followerName} welcome to the gang, grab some spray cans on the way in 🐑`,
-      ];
-      const msg = followResponses[Math.floor(Math.random() * followResponses.length)];
-      sendChatMessage(msg).catch(console.error);
-    }
   });
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
 
-  // Live detection via Pusher with debounce to prevent duplicates
+  // Welcome 5head when stream goes live
+  // Pusher live events (backup)
   const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
-  let goLiveDebounce = null;
-  const triggerGoLive = () => {
-    if (goLiveFired) return;
-    clearTimeout(goLiveDebounce);
-    goLiveDebounce = setTimeout(() => {
-      if (!goLiveFired) handleGoLive().catch(console.error);
-    }, 5000);
-  };
-  liveChannel.bind('App\\Events\\StreamerIsLive', triggerGoLive);
+  liveChannel.bind('App\\Events\\StreamerIsLive', () => handleGoLive());
+  liveChannel.bind('App\\Events\\LivestreamUpdated', () => handleGoLive());
 
   // Track subs via polling as backup
   let lastSubCount = 0;
@@ -1495,7 +1182,7 @@ function connectToKick() {
       if (currentSubs > lastSubCount && lastSubCount > 0) {
         const diff = currentSubs - lastSubCount;
         console.log(`🎉 Sub count increased by ${diff} (via poll)`);
-        const msg = await askClaude(`${diff} new sub(s) just came in! Hype them up as big chads and EVILSHEEP members (spelled E-V-I-L-S-H-E-E-P). Short and punchy.`);
+        const msg = await askClaude(`${diff} new sub(s) just came in! Hype them up as big chads and EvilSheep members. Short and punchy.`);
         if (msg) await sendChatMessage(msg);
         subGoal.current = Math.min(subGoal.current + diff, subGoal.target);
       }
@@ -1503,84 +1190,61 @@ function connectToKick() {
     } catch(e) {}
   }, 2 * 60 * 1000);
 
-  // Watchdog — if Pusher goes silent for 10 mins, reconnect
-  if (!watchdogActive) {
-    watchdogActive = true;
-    setInterval(async () => {
-      const silentFor = Date.now() - lastPusherActivity;
-      if (silentFor > 10 * 60 * 1000) {
-        console.log('⚠️ Watchdog: Pusher silent for 10+ mins — reconnecting...');
-        lastPusherActivity = Date.now(); // Reset so we don't spam reconnects
-        try {
-          pusher.disconnect();
-          await new Promise(r => setTimeout(r, 3000));
-          pusher.connect();
-          console.log('🔄 Pusher reconnected by watchdog');
-        } catch(e) { console.error('Watchdog reconnect error:', e.message); }
-      }
-    }, 5 * 60 * 1000); // Check every 5 mins
-  }
-
-  // Live detection via Pusher + poll backup with correct Kick API endpoint
-  // Use !golive in chat to manually trigger if needed
+  // Poll Kick API every 60 seconds to detect going live
   let wasLive = false;
-  let firstCheck = true;
   setInterval(async () => {
     try {
-      const tok = await getToken();
-      const headers = tok
-        ? { 'Authorization': `Bearer ${tok}`, 'Accept': 'application/json' }
-        : { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' };
-      const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${CONFIG.channelSlug}`, { headers });
-      if (!res.ok) { if (res.status !== 401) console.log(`📡 Live check returned ${res.status}`); return; }
+      // Try public API first
+      // Try multiple endpoints to find livestream status
+      let isLive = false;
+      
+      // Try v1 channel endpoint
+      const res = await fetch(`https://kick.com/api/v1/channels/${CONFIG.channelSlug}`, {
+        headers: { 
+          'Accept': 'application/json', 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://kick.com',
+        }
+      });
       const data = await res.json();
-      const isLive = !!(data?.data?.[0]?.stream?.is_live || data?.data?.[0]?.stream);
-      console.log(`📡 Live check: ${isLive ? 'LIVE' : 'offline'}`);
+      
+      // When offline livestream is null, when live it has data
+      if (data?.livestream === null || data?.livestream === undefined) {
+        isLive = false;
+      } else if (data?.livestream) {
+        isLive = true;
+      } else if (data?.data?.livestream) {
+        isLive = true;
+      }
+      
+      // Only log status changes to reduce noise
+      if (isLive) console.log(`📡 Live check: LIVE`);
+
       if (isLive && !wasLive) {
         wasLive = true;
-        if (firstCheck) {
-          // Check stream start time — if live for less than 5 mins, announce
-          const streamData = data?.data?.[0]?.stream;
-          const startedAt = streamData?.started_at ? new Date(streamData.started_at) : null;
-          const liveForMins = startedAt ? (Date.now() - startedAt.getTime()) / 60000 : 999;
-          if (liveForMins < 5 && !goLiveFired) {
-            console.log(`🟢 Stream just started (${Math.round(liveForMins)} mins ago) — announcing!`);
-            handleGoLive().catch(console.error);
-          } else {
-            console.log(`🟢 Already live on startup (${Math.round(liveForMins)} mins) — suppressing announcement`);
-            streamStartTime = streamStartTime || Date.now();
-          }
-        } else {
-          if (!goLiveFired) handleGoLive().catch(console.error);
-        }
+        console.log('🟢 5HeadNN is live (detected by poll)!');
+        await handleGoLive();
       } else if (!isLive && wasLive) {
         wasLive = false;
         streamStartTime = null;
-        goLiveFired = false;
         console.log('🔴 Stream ended');
       }
-      firstCheck = false;
-    } catch(e) { console.log('📡 Live check error:', e.message); }
-  }, 60 * 1000);
+    } catch(e) {
+      console.error('Live check error:', e.message);
+    }
+  }, 60000);
   console.log(`📡 Listening on chatroom ${CONFIG.chatroomId}`);
   console.log(`🐑 SheepSync active! Commands: !raid !bp !meta !loot !wipe !farm !base !discord !lurk`);
 
-  // Auto message every 60 minutes — only when live, chat active, no immediate repeats
-  let lastAutoMsgIndex = -1;
+  // Auto message every 30 minutes — only start once
   if (!global.autoMessageInterval) {
     global.autoMessageInterval = setInterval(async () => {
       if (!streamStartTime) return; // Only when live
-      const timeSinceChat = Date.now() - lastChatActivity;
-      if (timeSinceChat > 10 * 60 * 1000) { console.log('📢 Auto message skipped — chat quiet'); return; }
-      let idx;
-      do { idx = Math.floor(Math.random() * AUTO_MESSAGES.length); }
-      while (idx === lastAutoMsgIndex && AUTO_MESSAGES.length > 1);
-      lastAutoMsgIndex = idx;
-      const msgOrFn = AUTO_MESSAGES[idx];
+      const msgOrFn = AUTO_MESSAGES[Math.floor(Math.random() * AUTO_MESSAGES.length)];
       const msg = typeof msgOrFn === 'function' ? msgOrFn() : msgOrFn;
       await sendChatMessage(msg);
       console.log('📢 Auto message sent');
-    }, 60 * 60 * 1000);
+    }, 45 * 60 * 1000);
   }
 }
 
@@ -1685,92 +1349,14 @@ app.post('/webhook', express.json(), async (req, res) => {
     
     let msg = '';
     if (isGift && gifter) {
-      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`);
+      msg = await askClaude(`${gifter} just gifted a sub to ${username}. Hype the gifter as a massive chad and welcome ${username} as an official EvilSheep member. 2 sentences max.`);
     } else if (months > 1) {
       msg = await askClaude(`${username} just resubbed for ${months} months. Call them a big chad and loyal EvilSheep member. 2 sentences max.`);
     } else {
-      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`);
+      msg = await askClaude(`${username} just subscribed for the first time! Call them a big chad and welcome them as an official EvilSheep member. 2 sentences max.`);
     }
     if (msg) await sendChatMessage(msg);
   }
-});
-
-// ─────────────────────────────────────────
-//  KICK WEBHOOKS
-// ─────────────────────────────────────────
-const WEBHOOK_URL = 'https://rustbot-production.up.railway.app/kick-webhook';
-
-async function subscribeToWebhooks(token) {
-  const events = [
-    'channel.subscription.new',
-    'channel.subscription.gifts',
-    'channel.followed',
-    'livestream.status.updated',
-  ];
-  try {
-    const res = await fetch('https://api.kick.com/public/v1/events/subscriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ events: events.map(type => ({ name: type, version: 1 })), method: 'webhook', condition: { broadcaster_user_id: parseInt(CONFIG.broadcasterId) }, transport: { method: 'webhook', callback: WEBHOOK_URL } }),
-    });
-    const data = await res.json();
-    if (res.ok) { console.log('✅ Webhook subscriptions registered:', events.join(', ')); }
-    else { console.error('❌ Webhook subscribe failed:', JSON.stringify(data)); }
-  } catch(e) { console.error('Webhook subscribe error:', e.message); }
-}
-
-app.post('/kick-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  res.status(200).send('OK'); // Respond immediately so Kick doesn't retry
-  try {
-    const eventType = req.headers['kick-event-type'];
-    const body = JSON.parse(req.body.toString());
-    console.log(`🔔 Webhook: ${eventType}`);
-
-    if (eventType === 'channel.subscription.new') {
-      const username = body.subscriber?.username || 'Someone';
-      const months = body.duration || 1;
-      console.log(`🎉 Webhook sub: ${username} (${months} months)`);
-      subGoal.current = Math.min(subGoal.current + 1, subGoal.target);
-      let msg = months > 1
-        ? await askClaude(`${username} just resubbed for ${months} months. Big chad, loyal EvilSheep member (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`)
-        : await askClaude(`${username} just subscribed for the first time! Big chad, welcome to the EVILSHEEP family (spelled E-V-I-L-S-H-E-E-P). 2 sentences max.`);
-      if (msg) await sendChatMessage(msg);
-      try { const d = require('./discord'); if (d.notifySub) d.notifySub(username, months, false).catch(console.error); } catch(e) {}
-    }
-
-    else if (eventType === 'channel.subscription.gifts') {
-      const gifter = body.gifter?.is_anonymous ? 'An anonymous gifter' : (body.gifter?.username || 'Someone');
-      const quantity = body.giftees?.length || 1;
-      console.log(`🎁 Webhook gift bomb: ${gifter} gifted ${quantity} subs`);
-      subGoal.current = Math.min(subGoal.current + quantity, subGoal.target);
-      const msg = await askClaude(`${gifter} just gifted ${quantity} subs — MEGA CHAD energy! Hype them massively, welcome new EvilSheep members (spelled E-V-I-L-S-H-E-E-P). 2-3 sentences max.`);
-      if (msg) await sendChatMessage(msg);
-      try { const d = require('./discord'); if (d.notifySub) d.notifySub(`${gifter} (x${quantity} gift bomb)`, 1, true).catch(console.error); } catch(e) {}
-    }
-
-    else if (eventType === 'channel.followed') {
-      const follower = body.follower?.username || 'Someone';
-      console.log(`💜 Webhook follow: ${follower}`);
-      const followResponses = [
-        `@${follower} welcome to the EvilSheep gang! 🐑 you're one of us now`,
-        `@${follower} just followed — smart move lad, pull up a chair`,
-        `@${follower} has joined the EvilSheep gang 🐑 stand sprayers only from here`,
-        `@${follower} welcome in! don't ask about the monitor refresh rate`,
-        `oi oi @${follower} welcome to the gang, grab some spray cans on the way in 🐑`,
-      ];
-      const msg = followResponses[Math.floor(Math.random() * followResponses.length)];
-      await sendChatMessage(msg);
-      try { const d = require('./discord'); if (d.notifyFollow) d.notifyFollow(follower).catch(console.error); } catch(e) {}
-    }
-
-    else if (eventType === 'livestream.status.updated') {
-      const isLive = body.is_live;
-      console.log(`📡 Webhook live status: ${isLive ? 'LIVE' : 'offline'}`);
-      if (isLive && !goLiveFired) handleGoLive().catch(console.error);
-      else if (!isLive) { streamStartTime = null; goLiveFired = false; }
-    }
-
-  } catch(e) { console.error('Webhook handler error:', e.message); }
 });
 
 app.get('/logout', (req, res) => {
@@ -1816,7 +1402,6 @@ app.get('/callback', async (req, res) => {
     if (data.access_token) {
       saveTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
       codeVerifier = null;
-      subscribeToWebhooks(data.access_token).catch(console.error);
       res.send(`<html><body style="background:#0a0a0a;color:#e0d5c8;font-family:monospace;padding:40px;text-align:center">
         <h1 style="color:#53fc18">✅ SheepSync Authorized!</h1>
         <p>Bot will now post in chat. You can close this tab.</p>
@@ -1856,13 +1441,4 @@ app.listen(PORT, () => {
   }
 
   connectToKick();
-
-  // Re-subscribe to webhooks on startup using saved token
-  setTimeout(async () => {
-    const tok = await getToken();
-    if (tok) {
-      console.log('🔔 Re-subscribing to webhooks on startup...');
-      subscribeToWebhooks(tok).catch(console.error);
-    }
-  }, 5000); // Wait 5s for tokens to load
 });
