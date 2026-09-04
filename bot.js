@@ -870,7 +870,7 @@ async function askClaude(q) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama3-8b-8192',
+        model: 'openai/gpt-oss-120b',
         max_tokens: 150,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
