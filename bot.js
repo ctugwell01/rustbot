@@ -866,12 +866,22 @@ Keep responses SHORT — max 2 sentences. Be hype, use gamer lingo.`;
 
 async function askClaude(q) {
   try {
-    const r = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001', max_tokens: 150,
-      system: SYSTEM_PROMPT, messages: [{ role: 'user', content: q }],
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        max_tokens: 150,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: q },
+        ],
+      }),
     });
-    return r.content[0].text.trim();
-  } catch(e) { console.error('❌ Claude:', e.message); return null; }
+    const data = await res.json();
+    if (!res.ok) { console.error('❌ Groq:', res.status, JSON.stringify(data)); return null; }
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  } catch(e) { console.error('❌ Groq error:', e.message); return null; }
 }
 
 function isCD(u) { const l = cooldowns.get(u); return l && Date.now() - l < CONFIG.cooldownSeconds * 1000; }
