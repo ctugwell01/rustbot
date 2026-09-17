@@ -440,8 +440,8 @@ const SNIPER_PATTERNS = [
   /stream snip(ing|er|ped|ping) (you|u|him|5head)/i,  // must target 5head specifically
   /i found (you|u|him)/i,
   /coming for (you|u|him)/i,
-  /tell me (the )?server/i,
-  /drop (the )?server/i,
+  /tell me (the )?server\b/i,
+  /drop (the )?server\b/i,
   /i('?m| am) on (the )?server/i,
   /gonna snipe/i,
   /going to snipe/i,
@@ -458,7 +458,7 @@ const SNIPER_ROASTS = [
 
 const SPAM_PATTERNS = [
   /n[\s\W]*e[\s\W]*z[\s\W]*h[\s\W]*n[\s\W]*a/i,
-  /\w+[\s\W]*\.[\s\W]*c[\s\W]*o[\s\W]*m/i,
+  /\b\w+[\s\W]*\.[\s\W]*c[\s\W]*o[\s\W]*m\b/i,
   /discord\.gg\/[a-zA-Z0-9]+/i,        // actual discord invite links only
   /add me on discord/i,
   /add me on/i,
@@ -478,13 +478,13 @@ const SPAM_PATTERNS = [
   /grow.*discord/i,
   // /follow me/ removed — too broad, catches innocent messages
   /check out my (channel|stream|profile)/i,
-  /(onlyfans|cashapp|paypal\.me)/i,
+  /\b(onlyfans|cashapp|paypal\.me)\b/i,
   /5naies/i,
   /stream.*well.*fan/i,
   /you stream really well/i,
   /dedicated fan/i,
   /b[\s]*G[\s]*t[\s]*N/i,
-  /\w+[\s\W]*(=>|->|=|\.)\s*\w+\.(com|net|io|gg|tv)/i,
+  /\b\w+[\s\W]*(=>|->|=|\.)\s*\w+\.(com|net|io|gg|tv)/i,
   /write\s+[wW]\s+in\s+(his|her|their)\s+chat/i,
   /go\s+to\s+(his|her|their)\s+chat/i,
   /check\s+out\s+@\w+\s+on\s+kick/i,
@@ -498,7 +498,7 @@ const SPAM_PATTERNS = [
   /kick\s+is\s*:?\s*@\w+/i,
   /streamer\s+said\s+he/i,
   /streamer\s+wants\s+to/i,
-  /stream\s+with\s+u/i,
+  /stream\s+with\s+u\b/i,
   /live\s+rn\s+.{0,30}kick/i,
   /hes\s+live\s+.{0,20}kick/i,
   /he.s\s+live\s+.{0,20}kick/i,
@@ -518,15 +518,22 @@ const SPAM_PATTERNS = [
   /collab\s+together/i,
   /collaborate\s+together/i,
   /follow\s+for\s+follow/i,
-  /f4f/i,
+  /f4f\b/i,
   /sub\s+for\s+sub/i,
-  /remove\\s+space/i,
-  /keep\\s+(the\\s+)?chat\\s+alive/i,
-  /grow\\s+your\\s+audience/i,
-  /stream\\s+more\\s+active/i,
-  /help\\s+you\\s+grow/i,
-  /bots?\\s+keep/i,
-  /ai\\s+bots?\\s+(keep|help|grow)/i,
+  /remove\s+space/i,
+  /keep\s+(the\s+)?chat\s+alive/i,
+  /grow\s+your\s+audience/i,
+  /stream\s+more\s+active/i,
+  /help\s+you\s+grow/i,
+  /bots?\s+keep/i,
+  /ai\s+bots?\s+(keep|help|grow)/i,
+  /ai[\s-]*powered\s+chatbots?/i,
+  /chat\s+stays\s+active/i,
+  /around\s+the\s+clock/i,
+  /make\s+your\s+stream\s+fire/i,
+  /bot\s+liva\s+(?:com|net|io)/i,
+  /stream\s+(?:fire|active).{0,30}bot/i,
+  /chat.{0,25}(?:active|alive).{0,25}(?:bot|ai)/i,
   /instant\s+kick\s+vote/i,
   /view\s*b[o0]t/i,
   /viewb[o0]t/i,
@@ -607,10 +614,14 @@ function isSpamAdvanced(text) {
   
   const spamWords = ['nezhna', 'onlyfans', 'cashapp', 'paypalme', '5naies', 'ownkick', 'aiobots', 'ownkic'];
   if (spamWords.some(w => cleaned.includes(w) || normalized.includes(w))) return true;
-  if (/\w+\s*\.\s*(com|net|io|gg|tv|co)/i.test(text)) return true;
+  if (/\w+\s*\.\s*(com|net|io|gg|tv|co)\b/i.test(text)) return true;
   
   // Check normalized version for domain patterns
-  if (/\w+\.(com|net|io|gg|tv|co)/i.test(normalized)) return true;
+  if (/\w+\.(com|net|io|gg|tv|co)\b/i.test(normalized)) return true;
+
+  // Catch disguised promo domains such as 'Bot Liva com'
+  if (/\b[a-z0-9]{3,}\s+(com|net|io|gg|tv|co)\b/i.test(text) &&
+      /\b(bot|stream|viewer|follow|chat|audience|grow|boost|active|ai)\b/i.test(text)) return true;
   
   const atMentions = (text.match(/@\w+/g) || []).length;
   const links = (text.match(/https?:\/\/\S+/g) || []).length;
