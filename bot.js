@@ -512,6 +512,18 @@ const SPAM_PATTERNS = [
   /via\s+customizable/i,
   /let\s+collab(orate)?/i,
   /join\s+my\s+discord/i,
+
+  // Graphic designer / commission spam
+  /i\s+(?:do|make|create)\s+custom\s+(?:design|art|graphics?)/i,
+  /custom\s+design.{0,50}(?:streamer|channel|logo|banner|overlay|emote|screen)/i,
+  /(?:graphic|logo|banner|overlay|emote)\s+designer/i,
+  /(?:logo|banner|overlay|emote|screen)s?.{0,50}(?:custom|design|commission|portfolio)/i,
+  /(?:custom|design|commission|portfolio).{0,50}(?:logo|banner|overlay|emote|screen)s?/i,
+  /give\s+me\s+(?:your\s+)?discord\s+tag/i,
+  /discord\s+tag.{0,60}(?:show|send).{0,30}(?:work|portfolio|design)/i,
+  /show\s+you\s+(?:some\s+of\s+)?my\s+(?:work|portfolio|designs?)/i,
+  /(?:check|see|view)\s+(?:out\s+)?my\s+(?:work|portfolio|designs?)/i,
+  /commission(?:s|ed)?.{0,50}(?:logo|banner|overlay|emote|streamer|channel)/i,
   /am\s+also\s+a\s+streamer/i,
   /i.m\s+also\s+a\s+streamer/i,
   /also\s+a\s+streamer/i,
