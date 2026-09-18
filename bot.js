@@ -716,87 +716,152 @@ async function lookupUserId(username, token) {
   return null;
 }
 
+let resolvedBroadcasterId = null;
+
+async function resolveBroadcasterId(token) {
+  if (resolvedBroadcasterId) return resolvedBroadcasterId;
+
+  try {
+    const res = await fetch(`https://api.kick.com/public/v1/channels?slug=${encodeURIComponent(CONFIG.channelSlug)}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+    });
+    const text = await res.text();
+    if (res.ok) {
+      const data = text ? JSON.parse(text) : {};
+      const id = data?.data?.[0]?.broadcaster_user_id;
+      if (id) {
+        resolvedBroadcasterId = parseInt(id);
+        console.log(`✅ Resolved ${CONFIG.channelSlug} broadcaster_user_id: ${resolvedBroadcasterId}`);
+        return resolvedBroadcasterId;
+      }
+    } else {
+      console.error(`❌ Channel ID lookup failed → ${res.status}: ${text.substring(0, 300)}`);
+    }
+  } catch (e) {
+    console.error('❌ Channel ID lookup error:', e.message);
+  }
+
+  const fallback = parseInt(CONFIG.broadcasterId);
+  console.warn(`⚠️ Falling back to configured broadcaster_user_id: ${fallback}`);
+  return fallback;
+}
+
+async function logModIdentity(token) {
+  try {
+    const res = await fetch('https://api.kick.com/public/v1/users', {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      console.error(`❌ Mod identity lookup failed → ${res.status}: ${text.substring(0, 300)}`);
+      return;
+    }
+    const data = text ? JSON.parse(text) : {};
+    const me = data?.data?.[0];
+    const broadcasterId = await resolveBroadcasterId(token);
+    const meId = me?.user_id || me?.id;
+    console.log(`🔐 Mod OAuth account: ${me?.name || me?.username || 'unknown'} | user_id=${meId || 'unknown'} | channel broadcaster_user_id=${broadcasterId}`);
+    if (meId && parseInt(meId) !== parseInt(broadcasterId)) {
+      console.warn(`⚠️ MOD AUTH ACCOUNT MISMATCH: token user_id ${meId} is not ${CONFIG.channelSlug} (${broadcasterId}). Re-authorize /mod-auth while logged into ${CONFIG.channelSlug}.`);
+    }
+  } catch (e) {
+    console.error('❌ Mod identity check error:', e.message);
+  }
+}
+
 async function banUser(username, messageId = null, reason = 'Spam') {
   if (messageId) await deleteMessage(messageId);
+
   try {
+    // Only the mod token is expected to carry moderation:ban.
     const modToken = await getModToken();
-    const token = await getToken();
-    const useToken = modToken || token;
-    if (!useToken) { console.error('No token available for ban'); return; }
-
-    // Look up numeric user_id from cache or API
-    const userId = await lookupUserId(username, useToken);
-
-    // Working format confirmed: user_id + broadcaster_user_id + reason as integers
-    if (userId) {
-      try {
-        const body = { user_id: parseInt(userId), broadcaster_user_id: parseInt(CONFIG.broadcasterId), reason };
-        const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (res.ok) { console.log(`🔨 Banned ${username} via moderation API`); return; }
-        else { console.error(`Ban failed → ${res.status}:`, JSON.stringify(data)); }
-      } catch(e) { console.error('Ban error:', e.message); }
+    if (!modToken) {
+      console.error(`❌ Cannot ban ${username}: no mod token. Visit /mod-auth while logged into ${CONFIG.channelSlug}.`);
+      return false;
     }
 
-    // Fallback: try with username directly
-    const fallbacks = [
-      { url: 'https://api.kick.com/public/v1/moderation/bans', body: { broadcaster_user_id: parseInt(CONFIG.broadcasterId), username, reason } },
-      { url: `https://api.kick.com/public/v1/channels/${CONFIG.broadcasterId}/bans`, body: { banned_user: { username }, permanent: true, reason } },
-    ];
-    let banned = false;
-    for (const attempt of fallbacks) {
-      try {
-        const res = await fetch(attempt.url, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(attempt.body),
-        });
-        if (res.ok) { console.log(`🔨 Banned ${username} via ${attempt.url}`); banned = true; break; }
-        else { const d = await res.json(); console.error(`Ban fallback failed (${attempt.url}):`, JSON.stringify(d)); }
-      } catch(e) { console.error('Ban fallback error:', e.message); }
+    const broadcasterId = await resolveBroadcasterId(modToken);
+    const userId = await lookupUserId(username, modToken);
+    if (!userId) {
+      console.error(`❌ Cannot ban ${username}: could not resolve a Kick user_id`);
+      return false;
     }
-    if (!banned) {
-      // Final fallback — send /ban as chat command (works if SheepSyncBot is a mod)
-      try {
-        console.log(`⚡ Trying /ban chat command for ${username}`);
-        await sendChatMessage(`/ban ${username} Spam`);
-        console.log(`🔨 Sent /ban ${username} via chat command`);
-      } catch(e) { console.error('Chat ban error:', e.message); }
+
+    const body = {
+      broadcaster_user_id: parseInt(broadcasterId),
+      user_id: parseInt(userId),
+      reason: String(reason || 'Spam').substring(0, 1000),
+    };
+
+    console.log(`🔨 Ban request: channel=${body.broadcaster_user_id} target=${body.user_id} (${username})`);
+
+    const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${modToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const text = await res.text();
+    let data = text;
+    try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+
+    if (res.ok) {
+      console.log(`✅ BAN CONFIRMED: ${username} (user_id ${userId})`);
+      return true;
     }
-  } catch(e) { console.error('Ban error:', e.message); }
+
+    console.error(`❌ Ban API failed → ${res.status}: ${typeof data === 'string' ? data : JSON.stringify(data)}`);
+    if (res.status === 400) {
+      console.error(`⚠️ Kick rejected the moderation request. Check the mod OAuth account and broadcaster ID above; re-authorize /mod-auth while logged into ${CONFIG.channelSlug} if they do not match.`);
+    }
+    return false;
+  } catch(e) {
+    console.error('❌ Ban error:', e.message);
+    return false;
+  }
 }
 
 async function timeoutUser(username, duration = 600, reason = 'timed out') {
   const modToken = await getModToken();
-  const token = await getToken();
-  const useToken = modToken || token;
-  if (!useToken) return;
-  // Convert seconds to minutes for Kick API (max 10080 mins = 7 days)
-  const durationMins = Math.min(Math.ceil(duration / 60), 10080);
-  const userId = await lookupUserId(username, useToken);
+  if (!modToken) {
+    console.error(`❌ Cannot timeout ${username}: no mod token`);
+    return false;
+  }
+
+  const durationMins = Math.min(Math.max(Math.ceil(duration / 60), 1), 10080);
+  const userId = await lookupUserId(username, modToken);
+  if (!userId) {
+    console.error(`❌ Cannot timeout ${username}: could not resolve user_id`);
+    return false;
+  }
+
+  const broadcasterId = await resolveBroadcasterId(modToken);
   try {
-    if (userId) {
-      const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ broadcaster_user_id: String(CONFIG.broadcasterId), user_id: String(userId), duration: durationMins, reason }),
-      });
-      if (res.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); return; }
-      else { const d = await res.json(); console.error('Timeout failed:', JSON.stringify(d)); }
-    }
-    // Fallback without user_id
-    const res2 = await fetch('https://api.kick.com/public/v1/moderation/bans', {
+    const res = await fetch('https://api.kick.com/public/v1/moderation/bans', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${useToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ broadcaster_user_id: String(CONFIG.broadcasterId), username, duration: durationMins, reason }),
+      headers: { 'Authorization': `Bearer ${modToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        broadcaster_user_id: parseInt(broadcasterId),
+        user_id: parseInt(userId),
+        duration: durationMins,
+        reason: String(reason || 'timed out').substring(0, 1000),
+      }),
     });
-    if (res2.ok) { console.log(`⏱️ Timeout: ${username} for ${durationMins} mins`); }
-    else { const d = await res2.json(); console.error('Timeout fallback failed:', JSON.stringify(d)); }
-  } catch(e) { console.error('Timeout error:', e.message); }
+    const text = await res.text();
+    if (res.ok) {
+      console.log(`✅ TIMEOUT CONFIRMED: ${username} for ${durationMins} mins`);
+      return true;
+    }
+    console.error(`❌ Timeout API failed → ${res.status}: ${text.substring(0, 500)}`);
+    return false;
+  } catch(e) {
+    console.error('❌ Timeout error:', e.message);
+    return false;
+  }
 }
 
 const ROAST_RESPONSES = [
@@ -941,9 +1006,10 @@ const userIdCache = {};
 async function processMessage(data) {
   const username = data.sender?.username || '';
   lastChatActivity = Date.now();
-  // Cache user ID from sender data (Kick includes it in chat events)
-  if (username && data.sender?.id) {
-    userIdCache[username.toLowerCase()] = data.sender.id;
+  // Cache user ID from sender data (different Kick event shapes use id or user_id)
+  const senderUserId = data.sender?.user_id || data.sender?.id;
+  if (username && senderUserId) {
+    userIdCache[username.toLowerCase()] = parseInt(senderUserId);
   }
   const content = data.content || '';
   // Ignore own messages and protected bot accounts
@@ -975,10 +1041,14 @@ async function processMessage(data) {
 
   // Spam / bot check — ban silently then post casual message
   if (isSpam(content) || isSpamAdvanced(content)) {
-    await banUser(username, data.id || null);
-    const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
-    await sendChatMessage(roast, username); // @ them so chat knows who got banned
-    console.log(`🚫 Spam detected from ${username}: ${content}`);
+    const banned = await banUser(username, data.id || data.message_id || null);
+    if (banned) {
+      const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
+      await sendChatMessage(roast, username);
+      console.log(`🚫 Spam detected and banned: ${username}: ${content}`);
+    } else {
+      console.error(`🚨 Spam detected but BAN FAILED for ${username}: ${content}`);
+    }
     return;
   }
 
@@ -1053,12 +1123,11 @@ async function processMessage(data) {
       const targetUser = modCmdMatch[2];
       const reason = modCmdMatch[3] || 'removed by mod';
       if (action === 'timeout') {
-        // Timeout for 10 minutes
-        await timeoutUser(targetUser, 600, reason);
-        await sendChatMessage(`${targetUser} timed out for 10 mins 🔇`, username);
+        const ok = await timeoutUser(targetUser, 600, reason);
+        await sendChatMessage(ok ? `${targetUser} timed out for 10 mins 🔇` : `timeout failed for ${targetUser} — check Railway logs`, username);
       } else {
-        await banUser(targetUser, null);
-        await sendChatMessage(`${targetUser} got the hammer 🔨`, username);
+        const ok = await banUser(targetUser, null, reason);
+        await sendChatMessage(ok ? `${targetUser} got the hammer 🔨` : `ban failed for ${targetUser} — check Railway logs`, username);
       }
       console.log(`🔨 Mod command: ${action} ${targetUser} by ${username}`);
       return;
@@ -1689,7 +1758,9 @@ app.get('/mod-callback', async (req, res) => {
     const data = await r.json();
     if (data.access_token) {
       await saveModTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
-      res.send('<html><body style="background:#0a0a0a;color:#53fc18;font-family:monospace;padding:40px;text-align:center"><h1>Mod Auth Complete!</h1><p>5headnn ban powers are now active. You can close this tab.</p></body></html>');
+      resolvedBroadcasterId = null;
+      await logModIdentity(data.access_token);
+      res.send('<html><body style="background:#0a0a0a;color:#53fc18;font-family:monospace;padding:40px;text-align:center"><h1>Mod Auth Complete!</h1><p>Moderation token saved. Check Railway logs for the OAuth account and broadcaster ID verification.</p></body></html>');
     } else {
       res.send('Mod auth failed: ' + JSON.stringify(data));
     }
@@ -1885,7 +1956,11 @@ app.listen(PORT, () => {
   // Load mod tokens (5headnn ban powers)
   modTokens = loadModTokens();
   if (modTokens) {
-    console.log('✅ Mod tokens loaded — ban powers active!');
+    console.log('✅ Mod tokens loaded — checking ban identity...');
+    setTimeout(async () => {
+      const tok = await getModToken();
+      if (tok) await logModIdentity(tok);
+    }, 1500);
   } else {
     console.log('⚠️ No mod tokens — visit /mod-auth to authorize ban powers');
   }
