@@ -113,7 +113,7 @@ const KICK = {
   scopes: ['user:read', 'channel:read', 'chat:write', 'events:subscribe'],
 };
 
-// Mod app — 5headnn account for banning
+// Moderation OAuth app — authorize this as SheepSyncBot (the channel moderator)
 const KICK_MOD = {
   clientId: '01KNKY7E4FYYKG53FRSK3P28D0',
   clientSecret: '7bc3d62980f363fd5af7644d016ef38ed11e2ac41da25dd62f3918068512b474',
@@ -758,11 +758,31 @@ async function logModIdentity(token) {
     }
     const data = text ? JSON.parse(text) : {};
     const me = data?.data?.[0];
+
+    try {
+      const introspect = await fetch('https://id.kick.com/oauth/token/introspect', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+      });
+      const introspectText = await introspect.text();
+      const info = introspectText ? JSON.parse(introspectText) : {};
+      const scopes = String(info?.data?.scope || '');
+      console.log(`🔑 Moderation token scopes: ${scopes || 'unknown'}`);
+      if (!scopes.split(/\s+/).includes('moderation:ban')) {
+        console.warn('⚠️ moderation:ban is missing from the /mod-auth token. Re-authorize SheepSyncBot at /mod-auth.');
+      }
+    } catch (e) {
+      console.error('⚠️ Could not introspect moderation token:', e.message);
+    }
+
     const broadcasterId = await resolveBroadcasterId(token);
     const meId = me?.user_id || me?.id;
-    console.log(`🔐 Mod OAuth account: ${me?.name || me?.username || 'unknown'} | user_id=${meId || 'unknown'} | channel broadcaster_user_id=${broadcasterId}`);
-    if (meId && parseInt(meId) !== parseInt(broadcasterId)) {
-      console.warn(`⚠️ MOD AUTH ACCOUNT MISMATCH: token user_id ${meId} is not ${CONFIG.channelSlug} (${broadcasterId}). Re-authorize /mod-auth while logged into ${CONFIG.channelSlug}.`);
+    console.log(`🔐 Moderation OAuth account: ${me?.name || me?.username || 'unknown'} | moderator_user_id=${meId || 'unknown'} | channel broadcaster_user_id=${broadcasterId}`);
+    const modUsername = String(me?.name || me?.username || '').toLowerCase();
+    if (modUsername && modUsername !== 'sheepsyncbot' && modUsername !== 'sheepsync') {
+      console.warn(`⚠️ MOD AUTH ACCOUNT MISMATCH: /mod-auth is authorized as ${me?.name || me?.username}. It should be SheepSyncBot.`);
+    } else {
+      console.log(`✅ SheepSyncBot moderation identity confirmed. Moderator user_id and broadcaster_user_id are expected to be different.`);
     }
   } catch (e) {
     console.error('❌ Mod identity check error:', e.message);
@@ -776,7 +796,7 @@ async function banUser(username, messageId = null, reason = 'Spam') {
     // Only the mod token is expected to carry moderation:ban.
     const modToken = await getModToken();
     if (!modToken) {
-      console.error(`❌ Cannot ban ${username}: no mod token. Visit /mod-auth while logged into ${CONFIG.channelSlug}.`);
+      console.error(`❌ Cannot ban ${username}: no moderation token. Visit /mod-auth while logged into SheepSyncBot.`);
       return false;
     }
 
@@ -816,7 +836,7 @@ async function banUser(username, messageId = null, reason = 'Spam') {
 
     console.error(`❌ Ban API failed → ${res.status}: ${typeof data === 'string' ? data : JSON.stringify(data)}`);
     if (res.status === 400) {
-      console.error(`⚠️ Kick rejected the moderation request. Check the mod OAuth account and broadcaster ID above; re-authorize /mod-auth while logged into ${CONFIG.channelSlug} if they do not match.`);
+      console.error(`⚠️ Kick rejected the moderation request. Make sure /mod-auth was authorized as SheepSyncBot, SheepSyncBot is a moderator in ${CONFIG.channelSlug}, and the token includes moderation:ban.`);
     }
     return false;
   } catch(e) {
@@ -1734,7 +1754,14 @@ app.get('/mod-auth', (req, res) => {
     code_challenge_method: 'S256',
     state: 'sheepsync-mod',
   });
-  res.redirect(`${KICK_MOD.authUrl}?${params}`);
+  const authUrl = `${KICK_MOD.authUrl}?${params}`;
+  res.send(`<html><body style="background:#0a0a0a;color:#e0d5c8;font-family:monospace;padding:40px;text-align:center">
+    <h1 style="color:#c8622a">🐑 SheepSync Moderation Setup</h1>
+    <p>Make sure Kick is logged in as <strong>SheepSyncBot</strong>, not 5HeadNN.</p>
+    <p>SheepSyncBot must also be a moderator in <strong>${CONFIG.channelSlug}</strong>.</p>
+    <p>This authorization grants the <code>moderation:ban</code> scope used for automatic spam bans.</p>
+    <a href="${authUrl}" style="background:#53fc18;color:#000;padding:16px 32px;text-decoration:none;font-weight:bold;border-radius:8px;display:inline-block;margin-top:20px;font-size:18px">🔨 Authorize SheepSync Moderation</a>
+  </body></html>`);
 });
 
 app.get('/mod-callback', async (req, res) => {
@@ -1760,7 +1787,7 @@ app.get('/mod-callback', async (req, res) => {
       await saveModTokens({ ...data, expires_at: Date.now() + data.expires_in * 1000 });
       resolvedBroadcasterId = null;
       await logModIdentity(data.access_token);
-      res.send('<html><body style="background:#0a0a0a;color:#53fc18;font-family:monospace;padding:40px;text-align:center"><h1>Mod Auth Complete!</h1><p>Moderation token saved. Check Railway logs for the OAuth account and broadcaster ID verification.</p></body></html>');
+      res.send('<html><body style="background:#0a0a0a;color:#53fc18;font-family:monospace;padding:40px;text-align:center"><h1>SheepSync Mod Auth Complete!</h1><p>Moderation token saved. Check Railway logs for the SheepSyncBot identity and moderation scope.</p></body></html>');
     } else {
       res.send('Mod auth failed: ' + JSON.stringify(data));
     }
@@ -1953,7 +1980,7 @@ app.listen(PORT, () => {
     console.log('⚠️ No tokens — visit Railway URL to authorize');
   }
 
-  // Load mod tokens (5headnn ban powers)
+  // Load SheepSyncBot moderation token used for ban powers
   modTokens = loadModTokens();
   if (modTokens) {
     console.log('✅ Mod tokens loaded — checking ban identity...');
@@ -1962,7 +1989,7 @@ app.listen(PORT, () => {
       if (tok) await logModIdentity(tok);
     }, 1500);
   } else {
-    console.log('⚠️ No mod tokens — visit /mod-auth to authorize ban powers');
+    console.log('⚠️ No moderation token — visit /mod-auth while logged into SheepSyncBot');
   }
 
   connectToKick();
