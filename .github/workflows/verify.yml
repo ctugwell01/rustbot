@@ -1,0 +1,19 @@
+name: Verify bot moderation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate bot syntax
+        run: npm run check
+      - name: Run moderation regression tests
+        run: npm test
