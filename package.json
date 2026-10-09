@@ -4,7 +4,9 @@
   "description": "AI Rust chatbot for kick.com/5headnn",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node bot.js",
+    "test": "node --test",
+    "check": "node --check bot.js && node --check discord.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
