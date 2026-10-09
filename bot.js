@@ -21,6 +21,7 @@ const Pusher = require('pusher-js');
 const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
+const { createPromotionDetector } = require('./promotion-detector');
 
 // ─────────────────────────────────────────
 //  MEMORY SYSTEM
@@ -190,6 +191,9 @@ let streamStartTime = null;
 
 // Raid detection
 const recentMessages = new Map(); // message content -> [{username, timestamp}]
+const promotionDetector = createPromotionDetector();
+const spamBansInProgress = new Set();
+const recentSpamBans = new Map();
 let raidMode = false;
 
 async function checkForRaid(username, content) {
@@ -1059,25 +1063,40 @@ async function processMessage(data) {
   const isRaid = await checkForRaid(username, content);
   if (isRaid) return;
 
-  // Spam / bot check — ban silently then post casual message
-  if (isSpam(content) || isSpamAdvanced(content)) {
-    const banned = await banUser(username, data.id || data.message_id || null);
-    if (banned) {
-      const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
-      await sendChatMessage(roast, username);
-      console.log(`🚫 Spam detected and banned: ${username}: ${content}`);
-    } else {
-      console.error(`🚨 Spam detected but BAN FAILED for ${username}: ${content}`);
+  // Identify trusted users before moderation so the owner, mods and VIPs
+  // cannot be mistakenly banned by an automated content filter.
+  const badges = data.sender?.identity?.badges || [];
+  const isOwner = username.toLowerCase() === '5headnn';
+  const isVIP = isOwner || data.sender?.is_moderator === true ||
+    data.sender?.role === 'moderator' ||
+    badges.some(b => b.type === 'vip' || b.type === 'moderator' || b.type === 'broadcaster');
+  const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'og' || b.type === 'founder');
+  const userStatus = isVIP ? '[VIP]' : isSub ? '[SUB]' : '[VIEWER]';
+
+  // Use context across recent messages to detect growth scams that evade
+  // the original literal regexes. Never let a mere follow bypass moderation.
+  const promotion = isVIP ? null : promotionDetector.check(username, content);
+  if (!isVIP && (isSpamAdvanced(content) || promotion.isSpam)) {
+    const userKey = username.toLowerCase();
+    if (spamBansInProgress.has(userKey) || (recentSpamBans.get(userKey) || 0) > Date.now()) return;
+    spamBansInProgress.add(userKey);
+    try {
+      const reason = promotion.isSpam ? 'Unsolicited stream promotion' : 'Spam';
+      const banned = await banUser(username, data.id || data.message_id || null, reason);
+      if (banned) {
+        recentSpamBans.set(userKey, Date.now() + 5 * 60 * 1000);
+        if (recentSpamBans.size > 1000) recentSpamBans.delete(recentSpamBans.keys().next().value);
+        const roast = ROAST_RESPONSES[Math.floor(Math.random() * ROAST_RESPONSES.length)];
+        await sendChatMessage(roast, username);
+        console.log('🚫 Spam detected and banned: ' + username + ' (' + (promotion?.reason || 'existing spam rule') + '): ' + content);
+      } else {
+        console.error('🚨 Spam detected but BAN FAILED for ' + username + ': ' + content);
+      }
+    } finally {
+      spamBansInProgress.delete(userKey);
     }
     return;
   }
-
-  // Detect VIP/Sub status from badges
-  const badges = data.sender?.identity?.badges || [];
-  const isOwner = username.toLowerCase() === '5headnn';
-  const isVIP = isOwner || badges.some(b => b.type === 'vip' || b.type === 'moderator' || b.type === 'broadcaster');
-  const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'og' || b.type === 'founder');
-  const userStatus = isVIP ? '[VIP]' : isSub ? '[SUB]' : '[VIEWER]';
 
   // Stream sniper detection — ignore the streamer and mods/VIPs
   const isStreamer = username.toLowerCase() === '5headnn';
