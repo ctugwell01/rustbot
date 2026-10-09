@@ -133,3 +133,30 @@ rustbot-5headnn/
 ├── package.json    ← Dependencies
 └── README.md       ← This file
 ```
+
+
+## 🛡️ Automatic growth-scam moderation
+
+The bot now detects unsolicited stream-growth pitches by combining signals like
+promotion offers, community placement, follower/viewer targets, earnings promises,
+and requests to move to Discord or another messaging platform. It also considers
+up to five messages from the same viewer over two minutes, so scammers cannot
+evade detection just by splitting a pitch across several chat messages.
+
+The built-in checks run locally (no per-message AI requests or new credentials).
+A follow alone does **not** exempt anyone from moderation. Streamer, mod, and
+VIP accounts are protected from automatic spam bans.
+
+Automatic bans still require valid Kick moderation authorization: check Railway
+logs for `BAN CONFIRMED` or `BAN FAILED`. If unauthorized, authorize
+SheepSyncBot at `/mod-auth` with the `moderation:ban` scope.
+
+Before changing moderation rules, run:
+
+```bash
+npm test
+npm run check
+```
+
+The regression tests include real scam samples and normal chat messages to
+help prevent missed scams and accidental bans.
