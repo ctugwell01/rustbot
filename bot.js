@@ -1463,7 +1463,7 @@ function connectToKick() {
   if (kickConnected) { console.log('Already connected to Kick, skipping'); return; }
   kickConnected = true;
   const PusherClass = Pusher.default ? Pusher.default : Pusher;
-  const pusher = new PusherClass('32cbd69e4b950bf97679', {
+  const pusher = new PusherClass('34bf7a0ff419a2a775b9', {
     wsHost: 'ws-us2.pusher.com', cluster: 'us2', forceTLS: true, disableStats: true,
   });
   const chatRoom = pusher.subscribe(`chatrooms.${CONFIG.chatroomId}.v2`);
