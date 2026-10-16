@@ -1129,7 +1129,7 @@ async function processMessage(data) {
 
   // Welcome back returning viewers (seen before but not this session)
   const userKey = username.toLowerCase();
-  if (returning.has(userKey) && !greeted.has(userKey)) {
+  if (!content.trim().startsWith(CONFIG.commandPrefix) && returning.has(userKey) && !greeted.has(userKey)) {
     greeted.add(userKey);
     const welcomeBack = [
       `${username} is back, the NN returns`,
@@ -1650,17 +1650,14 @@ function connectToKick() {
   if (!watchdogActive) {
     watchdogActive = true;
     setInterval(async () => {
-      const silentFor = Date.now() - lastPusherActivity;
-      if (silentFor > 10 * 60 * 1000) {
-        console.log('⚠️ Watchdog: Pusher silent for 10+ mins — reconnecting...');
-        lastPusherActivity = Date.now(); // Reset so we don't spam reconnects
-        try {
-          pusher.disconnect();
-          await new Promise(r => setTimeout(r, 3000));
-          pusher.connect();
-          console.log('🔄 Pusher reconnected by watchdog');
-        } catch(e) { console.error('Watchdog reconnect error:', e.message); }
-      }
+      // A quiet chat is normal. Reconnecting a healthy socket every 10 minutes
+      // disrupts subscriptions and can cause commands to go missing.
+      const state = pusher.connection.state;
+      if (state === 'connected' || state === 'connecting') return;
+      console.warn(`⚠️ Watchdog: Pusher connection is ${state} — reconnecting...`);
+      try {
+        pusher.connect();
+      } catch(e) { console.error('Watchdog reconnect error:', e.message); }
     }, 5 * 60 * 1000); // Check every 5 mins
   }
 
