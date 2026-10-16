@@ -181,7 +181,7 @@ async function getModToken() {
 const TOKEN_FILE = '/tmp/tokens.json';
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const app = express();
-app.use(express.json());
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = Buffer.from(buf); } }));
 
 let tokens = null;
 let codeVerifier = null;
@@ -1863,6 +1863,7 @@ async function subscribeToWebhooks(token) {
     'channel.subscription.gifts',
     'channel.followed',
     'livestream.status.updated',
+    'chat.message.sent',
   ];
   try {
     const res = await fetch('https://api.kick.com/public/v1/events/subscriptions', {
@@ -1876,12 +1877,55 @@ async function subscribeToWebhooks(token) {
   } catch(e) { console.error('Webhook subscribe error:', e.message); }
 }
 
-app.post('/kick-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  res.status(200).send('OK'); // Respond immediately so Kick doesn't retry
+let kickPublicKey = null;
+let kickPublicKeyFetched = 0;
+const recentKickWebhookIds = new Map();
+
+async function validateKickWebhook(req) {
+  const id = req.get('kick-event-message-id');
+  const timestamp = req.get('kick-event-message-timestamp');
+  const signature = req.get('kick-event-signature');
+  if (!id || !timestamp || !signature || !req.rawBody) return false;
+  if (Math.abs(Date.now() - Date.parse(timestamp)) > 10 * 60 * 1000) return false;
+  if (!kickPublicKey || Date.now() - kickPublicKeyFetched > 60 * 60 * 1000) {
+    const response = await fetch('https://api.kick.com/public/v1/public-key');
+    if (!response.ok) throw new Error('Unable to fetch Kick webhook signing key');
+    const text = await response.text();
+    let key = text;
+    try {
+      const parsed = JSON.parse(text);
+      key = parsed.data?.public_key || parsed.public_key || parsed.data || text;
+    } catch(e) {}
+    if (typeof key !== 'string' || !key.includes('BEGIN PUBLIC KEY')) throw new Error('Kick public key response invalid');
+    kickPublicKey = key;
+    kickPublicKeyFetched = Date.now();
+  }
+  const signed = Buffer.concat([Buffer.from(`${id}.${timestamp}.`), req.rawBody]);
+  return crypto.verify('RSA-SHA256', signed, kickPublicKey, Buffer.from(signature, 'base64'));
+}
+
+app.post('/kick-webhook', async (req, res) => {
   try {
+    if (!(await validateKickWebhook(req))) return res.status(401).send('Invalid signature');
+    const eventId = req.get('kick-event-message-id');
+    if (recentKickWebhookIds.has(eventId)) return res.status(200).send('Duplicate');
+    recentKickWebhookIds.set(eventId, Date.now());
+    if (recentKickWebhookIds.size > 2000) {
+      for (const [id, t] of recentKickWebhookIds) {
+        if (Date.now() - t > 10 * 60 * 1000 || recentKickWebhookIds.size > 1500) recentKickWebhookIds.delete(id);
+      }
+    }
+    res.status(200).send('OK');
     const eventType = req.headers['kick-event-type'];
-    const body = JSON.parse(req.body.toString());
+    const body = req.body;
+    if (!body || typeof body !== 'object') throw new Error('Webhook JSON body missing');
     console.log(`🔔 Webhook: ${eventType}`);
+
+    if (eventType === 'chat.message.sent') {
+      if (Number(body.broadcaster?.user_id) !== Number(CONFIG.broadcasterId)) return;
+      await processMessage({ id: body.message_id, content: body.content, sender: body.sender });
+      return;
+    }
 
     if (eventType === 'channel.subscription.new') {
       const username = body.subscriber?.username || 'Someone';
