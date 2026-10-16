@@ -1869,10 +1869,10 @@ async function subscribeToWebhooks(token) {
     const res = await fetch('https://api.kick.com/public/v1/events/subscriptions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ events: events.map(type => ({ name: type, version: 1 })), method: 'webhook', condition: { broadcaster_user_id: parseInt(CONFIG.broadcasterId) }, transport: { method: 'webhook', callback: WEBHOOK_URL } }),
+      body: JSON.stringify({ broadcaster_user_id: Number(CONFIG.broadcasterId), events: events.map(type => ({ name: type, version: 1 })), method: 'webhook' }),
     });
     const data = await res.json();
-    if (res.ok) { console.log('✅ Webhook subscriptions registered:', events.join(', ')); }
+    if (res.ok) { console.log('✅ Webhook subscription request accepted:', JSON.stringify(data).slice(0, 1000)); }
     else { console.error('❌ Webhook subscribe failed:', JSON.stringify(data)); }
   } catch(e) { console.error('Webhook subscribe error:', e.message); }
 }
