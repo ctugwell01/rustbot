@@ -61,7 +61,7 @@ async function saveMemory() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
         body: JSON.stringify({
-          query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_MEMORY", value: "${Buffer.from(JSON.stringify(memory)).toString('base64')}" }) }`,
+          query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", name: "SAVED_MEMORY", value: "${Buffer.from(JSON.stringify(memory)).toString('base64')}" }) }`,
         }),
       });
       console.log('🧠 Memory saved to Railway');
@@ -141,13 +141,15 @@ async function saveModTokens(t) {
   modTokens = t;
   try { require('fs').writeFileSync(MOD_TOKEN_FILE, JSON.stringify(t)); } catch(e) {}
   try {
-    await fetch('https://backboard.railway.app/graphql/v2', {
+    const response = await fetch('https://backboard.railway.app/graphql/v2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
       body: JSON.stringify({
-        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_MOD_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
+        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", name: "SAVED_MOD_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
       }),
     });
+    const payload = await response.json();
+    if (!response.ok || payload.errors?.length) throw new Error('Railway mod token save failed');
     console.log('💾 Mod tokens saved to Railway');
   } catch(e) { console.error('Failed to save mod tokens:', e.message); }
 }
@@ -274,16 +276,18 @@ async function saveTokens(t) {
   console.log(`✅ Tokens saved — expires in ${Math.floor((t.expires_at - Date.now())/60000)} mins`);
   // Save to Railway Variables so they survive redeploys
   try {
-    await fetch(`https://backboard.railway.app/graphql/v2`, {
+    const response = await fetch(`https://backboard.railway.app/graphql/v2`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}`,
       },
       body: JSON.stringify({
-        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "35b9fd38-ec7b-4ec7-9fbc-31599a09119a", name: "SAVED_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
+        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", name: "SAVED_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
       }),
     });
+    const payload = await response.json();
+    if (!response.ok || payload.errors?.length) throw new Error('Railway token save failed');
     lastRailwaySave = Date.now();
     console.log('💾 Tokens saved to Railway Variables');
   } catch(e) {
@@ -1613,6 +1617,10 @@ function connectToKick() {
   });
   pusher.connection.bind('connected', () => console.log('✅ Pusher connected!'));
   pusher.connection.bind('disconnected', () => console.log('⚠️ Pusher disconnected...'));
+  pusher.connection.bind('state_change', states => console.log(`📡 Pusher state: ${states.previous} -> ${states.current}`));
+  pusher.connection.bind('error', err => console.error('❌ Pusher error:', JSON.stringify({type: err?.type, error: err?.error?.message || err?.error?.data || err?.error || err?.message})));
+  chatRoom.bind('pusher:subscription_succeeded', () => console.log('✅ Kick chatroom subscription confirmed'));
+  chatRoom.bind('pusher:subscription_error', err => console.error('❌ Kick chat subscription failed:', JSON.stringify(err)));
 
   // Live detection via Pusher with debounce to prevent duplicates
   const liveChannel = pusher.subscribe(`channel.${CONFIG.channelSlug}`);
