@@ -117,7 +117,7 @@ const KICK = {
 // Moderation OAuth app — authorize this as SheepSyncBot (the channel moderator)
 const KICK_MOD = {
   clientId: '01KNKY7E4FYYKG53FRSK3P28D0',
-  clientSecret: '7bc3d62980f363fd5af7644d016ef38ed11e2ac41da25dd62f3918068512b474',
+  clientSecret: process.env.KICK_MOD_CLIENT_SECRET,
   redirectUri: 'https://rustbot-production.up.railway.app/mod-callback',
   authUrl: 'https://id.kick.com/oauth/authorize',
   tokenUrl: 'https://id.kick.com/oauth/token',
@@ -1063,10 +1063,6 @@ async function processMessage(data) {
     return;
   }
 
-  // Raid detection — multiple users same message
-  const isRaid = await checkForRaid(username, content);
-  if (isRaid) return;
-
   // Identify trusted users before moderation so the owner, mods and VIPs
   // cannot be mistakenly banned by an automated content filter.
   const badges = data.sender?.identity?.badges || [];
@@ -1076,6 +1072,12 @@ async function processMessage(data) {
     badges.some(b => b.type === 'vip' || b.type === 'moderator' || b.type === 'broadcaster');
   const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'og' || b.type === 'founder');
   const userStatus = isVIP ? '[VIP]' : isSub ? '[SUB]' : '[VIEWER]';
+
+  // Never include trusted users in coordinated-raid detection or automatic bans.
+  if (!isVIP) {
+    const isRaid = await checkForRaid(username, content);
+    if (isRaid) return;
+  }
 
   // Use context across recent messages to detect growth scams that evade
   // the original literal regexes. Never let a mere follow bypass moderation.

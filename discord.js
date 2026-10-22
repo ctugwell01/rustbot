@@ -316,7 +316,7 @@ client.on('messageCreate', async (message) => {
   const isCmd = content.startsWith('!');
 
   // Spam detection
-  if (SPAM_PATTERNS.some(p => p.test(content))) {
+  if (!isPrivileged && SPAM_PATTERNS.some(p => p.test(content))) {
     try {
       await message.delete();
       await message.channel.send(`${message.author} spam detected — get out of here NN`);
