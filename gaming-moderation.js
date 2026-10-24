@@ -40,7 +40,28 @@ function isSeriousServerIssue(content) {
   ].some(pattern => pattern.test(content));
 }
 
+function isBanAppeal(content) {
+  return [
+    /\bwhy\s+(?:am|was)\s+i\s+bann?ed\b/i,
+    /\b(?:i\s+(?:got|was)|got)\s+bann?ed\b/i,
+    /\b(?:can|could|will|would)\s+(?:i|you)\s+(?:get\s+)?unbann?ed\b/i,
+    /\bunbann?\s+me\b/i,
+    /\bban\s+appeal\b/i,
+    /\bappeal(?:ing)?\s+(?:my\s+)?ban\b/i,
+    /\bbann?ed\s+(?:for\s+)?no\s+reason\b/i,
+  ].some(pattern => pattern.test(content));
+}
+
+function ticketChannelLink(guild) {
+  const candidates = ['ticket', 'tickets', 'support', 'support-ticket', 'support-tickets', 'open-a-ticket', 'create-ticket'];
+  const channel = guild.channels.cache.find(ch =>
+    ch.isTextBased?.() && candidates.includes(ch.name?.toLowerCase())
+  );
+  return channel ? `<#${channel.id}>` : '#ticket';
+}
+
 function suggestedChannel(content) {
+  if (isBanAppeal(content)) return 'ticket';
   if (/\b(bug|bugs|glitch|glitches|exploit|broken feature|fault)\b/i.test(content)) return 'bugs';
   if (/\b(suggest|suggestion|idea|feedback|feature request)\b/i.test(content)) return 'suggestions';
   if (/\b(gamemode|game mode|mode change|rotation|mode update)\b/i.test(content)) return 'gamemode-changes';
@@ -96,6 +117,40 @@ async function sendModLog(message, details) {
 
 async function handleGamingMessage(message) {
   if (message.guildId !== GAMING_GUILD_ID || message.author.bot) return false;
+
+  // Ban/unban questions should go through the ticket system, even if the user
+  // did not ping staff. This is informational only: no warnings or timeouts.
+  if (isBanAppeal(message.content) && !isStaff(message)) {
+    const target = ticketChannelLink(message.guild);
+    const protectedPing = isProtectedPing(message);
+    let deleted = false;
+
+    if (protectedPing && message.deletable) {
+      try {
+        await message.delete();
+        deleted = true;
+        console.log(`🗑️ Deleted owner ping from ban-appeal message by ${message.author.username}`);
+      } catch (error) {
+        console.error('Gaming Discord ban-appeal owner-ping delete failed:', error.message);
+      }
+    }
+
+    try {
+      const payload = {
+        content: `🐑 <@${message.author.id}> ban and unban questions need to go through ${target}. Open a ticket there and the staff team can review it.`,
+        allowedMentions: { parse: [] },
+      };
+      if (deleted) {
+        await message.channel.send(payload);
+      } else {
+        await message.reply({ ...payload, allowedMentions: { parse: [], repliedUser: false } });
+      }
+    } catch (error) {
+      console.error('Gaming Discord ban-appeal redirect failed:', error.message);
+    }
+
+    return true;
+  }
 
   // Simple connection test, available to owners and ordinary members alike.
   if (/^!sheepsync(?:\s+status)?\s*$/i.test(message.content)) {
@@ -186,5 +241,7 @@ module.exports = {
   handleGamingMessage,
   isProtectedPing,
   isSeriousServerIssue,
+  isBanAppeal,
+  ticketChannelLink,
   suggestedChannel,
 };
