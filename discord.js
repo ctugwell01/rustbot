@@ -5,6 +5,7 @@
 
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { GAMING_GUILD_ID, handleGamingMessage } = require('./gaming-moderation');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const CONFIG = {
@@ -271,6 +272,9 @@ client.once('ready', async () => {
 
 // Welcome new members and give them member role
 client.on('guildMemberAdd', async (member) => {
+  // Keep EvilSheep welcome/role automation out of the gaming server.
+  if (member.guild.id !== CONFIG.guildId) return;
+
   // Auto assign member role
   try {
     const memberRole = member.guild.roles.cache.find(r => r.name.toLowerCase() === 'member');
@@ -301,6 +305,10 @@ client.on('guildMemberAdd', async (member) => {
 // Message handler
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
+  if (message.guildId === GAMING_GUILD_ID) {
+    await handleGamingMessage(message);
+    return;
+  }
   if (message.guildId !== CONFIG.guildId) return;
 
   const content = message.content;
