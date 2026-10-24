@@ -229,7 +229,12 @@ const SPAM_PATTERNS = [
 //  EVENTS
 // ─────────────────────────────────────────
 client.once('ready', async () => {
-  console.log(`✅ Discord bot ready as ${client.user.tag}`);
+  console.log(`✅ Discord bot ready as ${client.user.tag} (user ID: ${client.user.id})`);
+  console.log(`🌐 Discord connected guilds: ${client.guilds.cache.map(g => `${g.name} (${g.id})`).join(', ') || 'none'}`);
+  const gamingGuild = client.guilds.cache.get(GAMING_GUILD_ID);
+  console.log(gamingGuild
+    ? `✅ Gaming Discord connected: ${gamingGuild.name} (${GAMING_GUILD_ID})`
+    : `⚠️ Gaming Discord NOT joined (${GAMING_GUILD_ID}) — check bot invitation`);
   loadDiscordMemory();
 
   // Find channels
@@ -268,6 +273,13 @@ client.once('ready', async () => {
     }
     console.log(`📢 General channel: ${generalChannel?.name}`);
   }
+});
+
+client.on('guildCreate', guild => {
+  console.log(`✅ Discord joined guild: ${guild.name} (${guild.id})${guild.id === GAMING_GUILD_ID ? ' [GAMING SERVER]' : ''}`);
+});
+client.on('guildDelete', guild => {
+  console.warn(`⚠️ Discord removed from guild: ${guild.name} (${guild.id})`);
 });
 
 // Welcome new members and give them member role
