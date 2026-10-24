@@ -8,9 +8,11 @@ const WARNING_WINDOW_MS = 15 * 60 * 1000;
 const PING_TIMEOUT_MS = 5 * 60 * 1000;
 const MENTION_SPAM_WINDOW_MS = 15 * 60 * 1000;
 const MENTION_SPAM_TIMEOUT_MS = 5 * 60 * 1000;
+const SERVER_ROAST_COOLDOWN_MS = 5 * 60 * 1000;
 const MOD_LOG_CHANNEL_ID = '1563588138738262036';
 const warnings = new Map();
 const mentionSpam = new Map();
+const serverRoastCooldowns = new Map();
 const protectedNames = new Set(['owner', '5headnn']);
 const staffRoleNames = new Set(['admin', 'admins', 'administrator', 'administrators', 'mod', 'mods', 'mod.', 'moderator', 'moderators', 'staff']);
 
@@ -156,6 +158,36 @@ function scamLinkReason(content) {
   }
 
   return null;
+}
+
+const SERVER_ROAST_REPLIES = [
+  'Server’s trash? Bold review from someone still in the Discord 😂',
+  'Yet here you are, still playing it 😂',
+  'Dogshit server, elite commitment from you though 🐑',
+  'Awful apparently, but you loaded back in pretty quick 😭',
+  'We’ll put that on the Steam reviews, cheers lad 📝',
+  'Constructive criticism has left the building 😂',
+  'Terrible server, fantastic player retention apparently.',
+  'Noted. The server has been emotionally devastated.',
+];
+
+function isServerTrashTalk(content) {
+  return [
+    /\b(?:this\s+)?server\s+(?:is|s|=)?\s*(?:trash|dog\s*shit|dogshit|shit|shite|awful|terrible|garbage|rubbish|ass)\b/i,
+    /\b(?:trash|dog\s*shit|dogshit|shit|shite|awful|terrible|garbage|rubbish|ass)\s+(?:server|srv)\b/i,
+  ].some(pattern => pattern.test(String(content || '')));
+}
+
+function serverRoastReply() {
+  return SERVER_ROAST_REPLIES[Math.floor(Math.random() * SERVER_ROAST_REPLIES.length)];
+}
+
+function canSendServerRoast(userId) {
+  const now = Date.now();
+  const last = serverRoastCooldowns.get(userId) || 0;
+  if (now - last < SERVER_ROAST_COOLDOWN_MS) return false;
+  serverRoastCooldowns.set(userId, now);
+  return true;
 }
 
 function ticketChannelLink(guild) {
@@ -409,6 +441,21 @@ async function handleGamingMessage(message) {
     return true;
   }
 
+  // Light-hearted response to casual server trash-talk. This is never a
+  // moderation action: no deletion, warning, timeout or ban. Protected pings
+  // continue into the owner-ping moderation flow below instead.
+  if (!isProtectedPing(message) && isServerTrashTalk(message.content) && canSendServerRoast(message.author.id)) {
+    try {
+      await message.reply({
+        content: `🐑 ${serverRoastReply()}`,
+        allowedMentions: { parse: [], repliedUser: false },
+      });
+    } catch (error) {
+      console.error('Gaming Discord server-roast reply failed:', error.message);
+    }
+    return true;
+  }
+
   // Simple connection test, available to owners and ordinary members alike.
   if (/^!sheepsync(?:\s+status)?\s*$/i.test(message.content)) {
     console.log(`🐑 Gaming Discord diagnostic command received in ${GAMING_GUILD_ID}`);
@@ -502,6 +549,9 @@ module.exports = {
   isPlayerReport,
   scamLinkReason,
   countStaffMentions,
+  isServerTrashTalk,
+  serverRoastReply,
+  SERVER_ROAST_REPLIES,
   ticketChannelLink,
   suggestedChannel,
 };
