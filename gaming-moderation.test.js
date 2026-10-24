@@ -9,6 +9,8 @@ const {
   handleGamingMessage,
   isProtectedPing,
   isSeriousServerIssue,
+  isBanAppeal,
+  ticketChannelLink,
   suggestedChannel,
 } = require('./gaming-moderation');
 
@@ -21,7 +23,7 @@ function gamingMessage(text, options = {}) {
   if (options.mentionOwner !== false) users.set(ownerId, { id: ownerId, username: '5HeadNN' });
   if (options.roleOwner) roles.set('987654321', { id: '987654321', name: 'Owner' });
 
-  const channelNames = ['rules', 'announcements', 'gamemode-changes', 'server-status', 'members-channel', 'suggestions', 'bugs'];
+  const channelNames = ['rules', 'announcements', 'gamemode-changes', 'server-status', 'members-channel', 'suggestions', 'bugs', 'tickets'];
   const channels = new Collection(channelNames.map((name, i) => [String(i + 1), {
     id: String(i + 1),
     name,
@@ -162,4 +164,38 @@ test('mod-log failure never blocks deletion or redirect', async () => {
   assert.equal(sends.length, 1);
   assert.equal(modLogs.length, 0);
   assert.match(sends[0].content, /<#1>/);
+});
+
+test('recognises common ban-appeal wording', () => {
+  assert.equal(isBanAppeal('why am i banned?'), true);
+  assert.equal(isBanAppeal('I got banned for no reason'), true);
+  assert.equal(isBanAppeal('can I get unbanned please'), true);
+  assert.equal(isBanAppeal('where are the rules?'), false);
+});
+
+test('standalone ban question redirects to tickets without deletion or timeout', async () => {
+  const { message, replies, sends, deletions, timeouts } = gamingMessage('why am i banned?', { mentionOwner: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 0);
+  assert.equal(timeouts.length, 0);
+  assert.equal(sends.length, 0);
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].content, /<#8>/);
+  assert.match(replies[0].content, /open a ticket/i);
+});
+
+test('ban question with owner ping deletes the ping and redirects to tickets without timeout', async () => {
+  const { message, replies, sends, deletions, timeouts } = gamingMessage('<@123456789> why am i banned?');
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 1);
+  assert.equal(timeouts.length, 0);
+  assert.equal(replies.length, 0);
+  assert.equal(sends.length, 1);
+  assert.match(sends[0].content, /<#8>/);
+  assert.match(sends[0].content, /staff team can review it/i);
+});
+
+test('ticket channel lookup falls back cleanly', () => {
+  const guild = { channels: { cache: new Collection() } };
+  assert.equal(ticketChannelLink(guild), '#ticket');
 });
