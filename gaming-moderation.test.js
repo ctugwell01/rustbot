@@ -13,6 +13,9 @@ const {
   isPlayerReport,
   scamLinkReason,
   countStaffMentions,
+  isServerTrashTalk,
+  serverRoastReply,
+  SERVER_ROAST_REPLIES,
   ticketChannelLink,
   suggestedChannel,
 } = require('./gaming-moderation');
@@ -286,4 +289,46 @@ test('single owner ping about real outage is exempt from mention-spam timeout', 
   assert.equal(await handleGamingMessage(message), true);
   assert.equal(deletions.length, 0);
   assert.equal(timeouts.length, 0);
+});
+
+test('recognises casual server trash-talk without treating it as moderation', () => {
+  assert.equal(isServerTrashTalk('server is trash'), true);
+  assert.equal(isServerTrashTalk('this server is dogshit'), true);
+  assert.equal(isServerTrashTalk('awful server'), true);
+  assert.equal(isServerTrashTalk('server is offline'), false);
+  assert.equal(isServerTrashTalk('I found a bug'), false);
+});
+
+test('server trash-talk gets a funny reply with no deletion or timeout', async () => {
+  const { message, replies, deletions, timeouts } = gamingMessage('server is trash', { mentionOwner: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(replies.length, 1);
+  assert.equal(deletions.length, 0);
+  assert.equal(timeouts.length, 0);
+  assert.ok(replies[0].content.startsWith('🐑 '));
+  const roast = replies[0].content.slice(3);
+  assert.ok(SERVER_ROAST_REPLIES.includes(roast));
+});
+
+test('server roast has a per-user cooldown so it does not spam', async () => {
+  const { message, replies } = gamingMessage('server is awful', { mentionOwner: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(await handleGamingMessage(message), false);
+  assert.equal(replies.length, 1);
+});
+
+test('server trash-talk with an owner ping still uses owner-ping moderation', async () => {
+  const { message, replies, sends, deletions, timeouts } = gamingMessage('<@123456789> server is trash');
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(replies.length, 0);
+  assert.equal(sends.length, 1);
+  assert.equal(deletions.length, 1);
+  assert.equal(timeouts.length, 0);
+  assert.match(sends[0].content, /please don't ping/i);
+});
+
+test('server roast picker always returns an approved reply', () => {
+  for (let i = 0; i < 20; i++) {
+    assert.ok(SERVER_ROAST_REPLIES.includes(serverRoastReply()));
+  }
 });
