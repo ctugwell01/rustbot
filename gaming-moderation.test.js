@@ -27,6 +27,8 @@ function gamingMessage(text, options = {}) {
     isTextBased: () => true,
   }]));
   const replies = [];
+  const sends = [];
+  const deletions = [];
   const timeouts = [];
   const member = {
     moderatable: options.moderatable !== false,
@@ -40,10 +42,13 @@ function gamingMessage(text, options = {}) {
     author: { id: String(++nextId), bot: false, username: 'RegularMember' },
     member,
     content: text,
+    deletable: options.deletable !== false,
+    channel: { send: async payload => sends.push(payload) },
     mentions: { users, roles, members },
+    delete: async () => deletions.push(text),
     reply: async payload => replies.push(payload),
   };
-  return { message, replies, timeouts };
+  return { message, replies, sends, deletions, timeouts };
 }
 
 test('recognises a real 5HeadNN ping and @Owner role', () => {
@@ -62,9 +67,11 @@ test('allows genuine server incidents to ping the owner', async () => {
   assert.equal(isSeriousServerIssue('Server is down again!'), true);
   assert.equal(isSeriousServerIssue("Can't connect to the Rust server"), true);
   assert.equal(isSeriousServerIssue('What are the server rules?'), false);
-  const { message, replies, timeouts } = gamingMessage('<@123456789> server is offline');
+  const { message, replies, sends, deletions, timeouts } = gamingMessage('<@123456789> server is offline');
   assert.equal(await handleGamingMessage(message), true);
   assert.equal(replies.length, 0);
+  assert.equal(sends.length, 0);
+  assert.equal(deletions.length, 0);
   assert.equal(timeouts.length, 0);
 });
 
@@ -78,30 +85,34 @@ test('routes routine topics to the screenshot channels', () => {
   assert.equal(suggestedChannel('hello owner can you help me'), 'members-channel');
 });
 
-test('first routine ping gets a channel link, no timeout and no notified mentions', async () => {
-  const { message, replies, timeouts } = gamingMessage('<@123456789> I found a bug');
+test('first routine ping is deleted then redirected with no notified mentions', async () => {
+  const { message, sends, deletions, timeouts } = gamingMessage('<@123456789> I found a bug');
   assert.equal(await handleGamingMessage(message), true);
   assert.equal(timeouts.length, 0);
-  assert.equal(replies.length, 1);
-  assert.match(replies[0].content, /<#7>/);
-  assert.deepEqual(replies[0].allowedMentions, { parse: [], repliedUser: false });
+  assert.equal(deletions.length, 1);
+  assert.equal(sends.length, 1);
+  assert.match(sends[0].content, /<#7>/);
+  assert.deepEqual(sends[0].allowedMentions, { parse: [] });
 });
 
-test('staff are exempt from ping rules', async () => {
-  const { message, replies } = gamingMessage('<@123456789> Need help', { staff: true });
+test('staff are exempt from ping deletion and redirects', async () => {
+  const { message, replies, sends, deletions } = gamingMessage('<@123456789> Need help', { staff: true });
   assert.equal(await handleGamingMessage(message), true);
   assert.equal(replies.length, 0);
+  assert.equal(sends.length, 0);
+  assert.equal(deletions.length, 0);
 });
 
-test('three repeated routine pings cause a five-minute timeout but never a ban', async () => {
-  const { message, replies, timeouts } = gamingMessage('<@123456789> general question');
+test('three repeated routine pings are deleted and cause a five-minute timeout but never a ban', async () => {
+  const { message, sends, deletions, timeouts } = gamingMessage('<@123456789> general question');
   await handleGamingMessage(message);
   await handleGamingMessage(message);
   await handleGamingMessage(message);
-  assert.equal(replies.length, 3);
+  assert.equal(sends.length, 3);
+  assert.equal(deletions.length, 3);
   assert.equal(timeouts.length, 1);
   assert.equal(timeouts[0].length, 5 * 60 * 1000);
-  assert.match(replies[2].content, /timed out for 5 minutes/i);
+  assert.match(sends[2].content, /timed out for 5 minutes/i);
 });
 
 test('does not moderate other Discord servers', async () => {
@@ -116,4 +127,12 @@ test('SheepSync diagnostic responds in gaming server even for staff', async () =
   assert.equal(replies.length, 1);
   assert.match(replies[0].content, /online in this gaming Discord/i);
   assert.equal(timeouts.length, 0);
+});
+
+test('routine ping still redirects if SheepSync lacks delete permission', async () => {
+  const { message, sends, deletions } = gamingMessage('<@123456789> where are the rules?', { deletable: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 0);
+  assert.equal(sends.length, 1);
+  assert.match(sends[0].content, /<#1>/);
 });
