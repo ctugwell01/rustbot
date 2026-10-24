@@ -67,7 +67,7 @@ async function handleGamingMessage(message) {
   if (message.guildId !== GAMING_GUILD_ID || message.author.bot) return false;
 
   // Simple connection test, available to owners and ordinary members alike.
-  if (/^!sheepsync(?:\\s+status)?\\s*$/i.test(message.content)) {
+  if (/^!sheepsync(?:\s+status)?\s*$/i.test(message.content)) {
     console.log(`🐑 Gaming Discord diagnostic command received in ${GAMING_GUILD_ID}`);
     try {
       await message.reply({
