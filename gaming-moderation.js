@@ -65,7 +65,23 @@ function channelLink(guild, name) {
 
 async function handleGamingMessage(message) {
   if (message.guildId !== GAMING_GUILD_ID || message.author.bot) return false;
+
+  // Simple connection test, available to owners and ordinary members alike.
+  if (/^!sheepsync(?:\\s+status)?\\s*$/i.test(message.content)) {
+    console.log(`🐑 Gaming Discord diagnostic command received in ${GAMING_GUILD_ID}`);
+    try {
+      await message.reply({
+        content: '🐑 SheepSync is online in this gaming Discord. Owner-ping redirects are enabled. Routine questions go to the correct channel; genuine server outages may ping the owner.',
+        allowedMentions: { parse: [], repliedUser: false },
+      });
+    } catch (error) {
+      console.error('Gaming Discord diagnostic reply failed:', error.message);
+    }
+    return true;
+  }
+
   if (!isProtectedPing(message)) return false;
+  console.log(`🐑 Gaming Discord protected owner ping detected in ${GAMING_GUILD_ID}`);
   if (isStaff(message) || isSeriousServerIssue(message.content)) return true;
 
   const target = channelLink(message.guild, suggestedChannel(message.content));
