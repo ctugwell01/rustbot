@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { Collection } = require('discord.js');
 const {
   GAMING_GUILD_ID,
+  MOD_LOG_CHANNEL_ID,
   handleGamingMessage,
   isProtectedPing,
   isSeriousServerIssue,
@@ -28,6 +29,15 @@ function gamingMessage(text, options = {}) {
   }]));
   const replies = [];
   const sends = [];
+  const modLogs = [];
+  if (options.modLogAvailable !== false) {
+    channels.set(MOD_LOG_CHANNEL_ID, {
+      id: MOD_LOG_CHANNEL_ID,
+      name: 'mod-logs',
+      isTextBased: () => true,
+      send: async payload => modLogs.push(payload),
+    });
+  }
   const deletions = [];
   const timeouts = [];
   const member = {
@@ -43,12 +53,12 @@ function gamingMessage(text, options = {}) {
     member,
     content: text,
     deletable: options.deletable !== false,
-    channel: { send: async payload => sends.push(payload) },
+    channel: { id: 'source-channel', send: async payload => sends.push(payload) },
     mentions: { users, roles, members },
     delete: async () => deletions.push(text),
     reply: async payload => replies.push(payload),
   };
-  return { message, replies, sends, deletions, timeouts };
+  return { message, replies, sends, modLogs, deletions, timeouts };
 }
 
 test('recognises a real 5HeadNN ping and @Owner role', () => {
@@ -86,33 +96,41 @@ test('routes routine topics to the screenshot channels', () => {
 });
 
 test('first routine ping is deleted then redirected with no notified mentions', async () => {
-  const { message, sends, deletions, timeouts } = gamingMessage('<@123456789> I found a bug');
+  const { message, sends, modLogs, deletions, timeouts } = gamingMessage('<@123456789> I found a bug');
   assert.equal(await handleGamingMessage(message), true);
   assert.equal(timeouts.length, 0);
   assert.equal(deletions.length, 1);
   assert.equal(sends.length, 1);
   assert.match(sends[0].content, /<#7>/);
   assert.deepEqual(sends[0].allowedMentions, { parse: [] });
+  assert.equal(modLogs.length, 1);
+  assert.match(modLogs[0].content, /Owner-ping moderation/i);
+  assert.match(modLogs[0].content, /Redirect.*<#7>/s);
+  assert.match(modLogs[0].content, /Warning 1\/3/);
+  assert.deepEqual(modLogs[0].allowedMentions, { parse: [] });
 });
 
 test('staff are exempt from ping deletion and redirects', async () => {
-  const { message, replies, sends, deletions } = gamingMessage('<@123456789> Need help', { staff: true });
+  const { message, replies, sends, modLogs, deletions } = gamingMessage('<@123456789> Need help', { staff: true });
   assert.equal(await handleGamingMessage(message), true);
   assert.equal(replies.length, 0);
   assert.equal(sends.length, 0);
+  assert.equal(modLogs.length, 0);
   assert.equal(deletions.length, 0);
 });
 
 test('three repeated routine pings are deleted and cause a five-minute timeout but never a ban', async () => {
-  const { message, sends, deletions, timeouts } = gamingMessage('<@123456789> general question');
+  const { message, sends, modLogs, deletions, timeouts } = gamingMessage('<@123456789> general question');
   await handleGamingMessage(message);
   await handleGamingMessage(message);
   await handleGamingMessage(message);
   assert.equal(sends.length, 3);
+  assert.equal(modLogs.length, 3);
   assert.equal(deletions.length, 3);
   assert.equal(timeouts.length, 1);
   assert.equal(timeouts[0].length, 5 * 60 * 1000);
   assert.match(sends[2].content, /timed out for 5 minutes/i);
+  assert.match(modLogs[2].content, /5-minute timeout applied/i);
 });
 
 test('does not moderate other Discord servers', async () => {
@@ -134,5 +152,14 @@ test('routine ping still redirects if SheepSync lacks delete permission', async 
   assert.equal(await handleGamingMessage(message), true);
   assert.equal(deletions.length, 0);
   assert.equal(sends.length, 1);
+  assert.match(sends[0].content, /<#1>/);
+});
+
+test('mod-log failure never blocks deletion or redirect', async () => {
+  const { message, sends, modLogs, deletions } = gamingMessage('<@123456789> what are the rules?', { modLogAvailable: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 1);
+  assert.equal(sends.length, 1);
+  assert.equal(modLogs.length, 0);
   assert.match(sends[0].content, /<#1>/);
 });
