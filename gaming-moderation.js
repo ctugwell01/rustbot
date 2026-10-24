@@ -6,6 +6,7 @@ const { PermissionFlagsBits } = require('discord.js');
 const GAMING_GUILD_ID = '1540790437508546700';
 const WARNING_WINDOW_MS = 15 * 60 * 1000;
 const PING_TIMEOUT_MS = 5 * 60 * 1000;
+const MOD_LOG_CHANNEL_ID = '1563588138738262036';
 const warnings = new Map();
 const protectedNames = new Set(['owner', '5headnn']);
 const staffRoleNames = new Set(['admin', 'admins', 'administrator', 'administrators', 'mod', 'mods', 'mod.', 'moderator', 'moderators', 'staff']);
@@ -63,6 +64,36 @@ function channelLink(guild, name) {
   return channel ? `<#${channel.id}>` : `#${name}`;
 }
 
+
+async function sendModLog(message, details) {
+  const modLogChannel = message.guild.channels.cache.get(MOD_LOG_CHANNEL_ID);
+  if (!modLogChannel?.isTextBased?.()) {
+    console.warn(`Gaming Discord mod-log channel unavailable: ${MOD_LOG_CHANNEL_ID}`);
+    return;
+  }
+
+  const original = String(details.originalContent || '').replace(/\s+/g, ' ').trim().slice(0, 500) || '(empty message)';
+  const sourceChannel = message.channel?.id ? `<#${message.channel.id}>` : 'unknown channel';
+  const deleteStatus = details.deleted ? 'Deleted' : 'Delete failed / unavailable';
+  const timeoutStatus = details.timedOut ? '5-minute timeout applied' : `Warning ${details.warningCount}/3`;
+
+  try {
+    await modLogChannel.send({
+      content:
+        `🛡️ **SheepSync owner-ping moderation**\n` +
+        `**Member:** <@${message.author.id}> (\`${message.author.username}\`, ID \`${message.author.id}\`)\n` +
+        `**Channel:** ${sourceChannel}\n` +
+        `**Original:** ${original}\n` +
+        `**Redirect:** ${details.target}\n` +
+        `**Message:** ${deleteStatus}\n` +
+        `**Action:** ${timeoutStatus}`,
+      allowedMentions: { parse: [] },
+    });
+  } catch (error) {
+    console.error('Gaming Discord mod-log send failed:', error.message);
+  }
+}
+
 async function handleGamingMessage(message) {
   if (message.guildId !== GAMING_GUILD_ID || message.author.bot) return false;
 
@@ -84,13 +115,16 @@ async function handleGamingMessage(message) {
   console.log(`🐑 Gaming Discord protected owner ping detected in ${GAMING_GUILD_ID}`);
   if (isStaff(message) || isSeriousServerIssue(message.content)) return true;
 
+  const originalContent = message.content;
   const target = channelLink(message.guild, suggestedChannel(message.content));
+  let deleted = false;
 
   // Remove routine owner pings from chat before posting the redirect. Serious
   // server issues and staff messages return above and are never deleted.
   if (message.deletable) {
     try {
       await message.delete();
+      deleted = true;
       console.log(`🗑️ Deleted unnecessary owner ping from ${message.author.username} in gaming Discord`);
     } catch (error) {
       console.error('Gaming Discord owner-ping delete failed:', error.message);
@@ -108,12 +142,14 @@ async function handleGamingMessage(message) {
   warnings.set(key, record);
 
   let timeoutText = '';
+  let timedOut = false;
   // Three unnecessary pings within 15 minutes counts as persistent ping spam.
   if (record.count >= 3) {
     if (message.member?.moderatable) {
       try {
         await message.member.timeout(PING_TIMEOUT_MS, 'Repeated unnecessary owner/5HeadNN pings after warnings');
         timeoutText = ' You have been timed out for 5 minutes for repeatedly pinging the owner.';
+        timedOut = true;
         warnings.delete(key);
       } catch (error) {
         console.error('Gaming Discord owner-ping timeout failed:', error.message);
@@ -132,11 +168,21 @@ async function handleGamingMessage(message) {
   } catch (error) {
     console.error('Gaming Discord owner-ping redirect failed:', error.message);
   }
+
+  await sendModLog(message, {
+    originalContent,
+    target,
+    deleted,
+    timedOut,
+    warningCount: record.count,
+  });
+
   return true;
 }
 
 module.exports = {
   GAMING_GUILD_ID,
+  MOD_LOG_CHANNEL_ID,
   handleGamingMessage,
   isProtectedPing,
   isSeriousServerIssue,
