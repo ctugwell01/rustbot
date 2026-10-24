@@ -85,6 +85,20 @@ async function handleGamingMessage(message) {
   if (isStaff(message) || isSeriousServerIssue(message.content)) return true;
 
   const target = channelLink(message.guild, suggestedChannel(message.content));
+
+  // Remove routine owner pings from chat before posting the redirect. Serious
+  // server issues and staff messages return above and are never deleted.
+  if (message.deletable) {
+    try {
+      await message.delete();
+      console.log(`🗑️ Deleted unnecessary owner ping from ${message.author.username} in gaming Discord`);
+    } catch (error) {
+      console.error('Gaming Discord owner-ping delete failed:', error.message);
+    }
+  } else {
+    console.warn('Gaming Discord cannot delete owner ping — grant SheepSync Manage Messages.');
+  }
+
   const key = `${message.guildId}:${message.author.id}`;
   const now = Date.now();
   const old = warnings.get(key);
@@ -110,9 +124,10 @@ async function handleGamingMessage(message) {
   }
 
   try {
-    await message.reply({
-      content: `🐑 Please don't ping @Owner or @5HeadNN for routine questions. Use ${target} instead, or ask the admins. Owner pings are for serious server outages or technical issues only.${timeoutText}`,
-      allowedMentions: { parse: [], repliedUser: false },
+    await message.channel.send({
+      content: `🐑 <@${message.author.id}> please don't ping @Owner or @5HeadNN for routine questions. Use ${target} instead, or ask the admins. Owner pings are for serious server outages or technical issues only.${timeoutText}`,
+      // Render the member reference without creating another notification.
+      allowedMentions: { parse: [] },
     });
   } catch (error) {
     console.error('Gaming Discord owner-ping redirect failed:', error.message);
