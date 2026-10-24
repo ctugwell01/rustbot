@@ -61,7 +61,7 @@ async function saveMemory() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
         body: JSON.stringify({
-          query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", name: "SAVED_MEMORY", value: "${Buffer.from(JSON.stringify(memory)).toString('base64')}" }) }`,
+          query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", skipDeploys: true, name: "SAVED_MEMORY", value: "${Buffer.from(JSON.stringify(memory)).toString('base64')}" }) }`,
         }),
       });
       console.log('🧠 Memory saved to Railway');
@@ -145,7 +145,7 @@ async function saveModTokens(t) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}` },
       body: JSON.stringify({
-        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", name: "SAVED_MOD_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
+        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", skipDeploys: true, name: "SAVED_MOD_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
       }),
     });
     const payload = await response.json();
@@ -283,7 +283,7 @@ async function saveTokens(t) {
         'Authorization': `Bearer ${process.env.RAILWAY_API_TOKEN}`,
       },
       body: JSON.stringify({
-        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", name: "SAVED_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
+        query: `mutation { variableUpsert(input: { projectId: "5e70915b-a789-4319-9291-31b531415d71", environmentId: "${process.env.RAILWAY_ENVIRONMENT_ID || ''}", serviceId: "${process.env.RAILWAY_SERVICE_ID || '40be843f-87d6-45b3-a504-5442c7ad8d49'}", skipDeploys: true, name: "SAVED_TOKENS", value: "${Buffer.from(JSON.stringify(t)).toString('base64')}" }) }`,
       }),
     });
     const payload = await response.json();
