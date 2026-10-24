@@ -109,3 +109,11 @@ test('does not moderate other Discord servers', async () => {
   assert.equal(await handleGamingMessage(message), false);
   assert.equal(replies.length, 0);
 });
+
+test('SheepSync diagnostic responds in gaming server even for staff', async () => {
+  const { message, replies, timeouts } = gamingMessage('!sheepsync', { staff: true, mentionOwner: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].content, /online in this gaming Discord/i);
+  assert.equal(timeouts.length, 0);
+});
