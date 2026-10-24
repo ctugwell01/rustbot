@@ -10,6 +10,9 @@ const {
   isProtectedPing,
   isSeriousServerIssue,
   isBanAppeal,
+  isPlayerReport,
+  scamLinkReason,
+  countStaffMentions,
   ticketChannelLink,
   suggestedChannel,
 } = require('./gaming-moderation');
@@ -22,6 +25,7 @@ function gamingMessage(text, options = {}) {
   const ownerId = '123456789';
   if (options.mentionOwner !== false) users.set(ownerId, { id: ownerId, username: '5HeadNN' });
   if (options.roleOwner) roles.set('987654321', { id: '987654321', name: 'Owner' });
+  if (options.roleStaff) roles.set('555555555', { id: '555555555', name: 'Staff' });
 
   const channelNames = ['rules', 'announcements', 'gamemode-changes', 'server-status', 'members-channel', 'suggestions', 'bugs', 'tickets'];
   const channels = new Collection(channelNames.map((name, i) => [String(i + 1), {
@@ -198,4 +202,88 @@ test('ban question with owner ping deletes the ping and redirects to tickets wit
 test('ticket channel lookup falls back cleanly', () => {
   const guild = { channels: { cache: new Collection() } };
   assert.equal(ticketChannelLink(guild), '#ticket');
+});
+
+test('recognises cheating/player/admin-abuse reports', () => {
+  assert.equal(isPlayerReport('this guy is cheating'), true);
+  assert.equal(isPlayerReport('I need to report a player'), true);
+  assert.equal(isPlayerReport('admin abuse'), true);
+  assert.equal(isPlayerReport('where are the rules?'), false);
+});
+
+test('player report redirects to ticket with Steam ID and clip instructions', async () => {
+  const { message, replies, sends, deletions, timeouts, modLogs } = gamingMessage('this guy is cheating', { mentionOwner: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 0);
+  assert.equal(timeouts.length, 0);
+  assert.equal(sends.length, 0);
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].content, /<#8>/);
+  assert.match(replies[0].content, /Steam ID/i);
+  assert.match(replies[0].content, /clip\/video if possible/i);
+  assert.equal(modLogs.length, 1);
+  assert.match(modLogs[0].content, /Player\/report redirect/i);
+});
+
+test('player report with owner ping removes the ping but never times out', async () => {
+  const { message, replies, sends, deletions, timeouts } = gamingMessage('<@123456789> report player this guy is cheating');
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 1);
+  assert.equal(timeouts.length, 0);
+  assert.equal(replies.length, 0);
+  assert.equal(sends.length, 1);
+  assert.match(sends[0].content, /Steam ID/i);
+});
+
+test('detects obvious invite, fake Nitro, fake Steam and shortened links', () => {
+  assert.match(scamLinkReason('join my server https://discord.gg/abcdef'), /Discord invite spam/i);
+  assert.match(scamLinkReason('free nitro https://discord-nitro-gift.example/claim'), /fake Discord\/Nitro/i);
+  assert.match(scamLinkReason('steam login https://steamcommunity-login.example/signin'), /fake Steam/i);
+  assert.match(scamLinkReason('click https://bit.ly/abc123'), /shortened URL/i);
+  assert.equal(scamLinkReason('profile https://steamcommunity.com/id/example'), null);
+  assert.equal(scamLinkReason('gift https://discord.gift/example'), null);
+});
+
+test('scam link is deleted and logged without a ban or timeout', async () => {
+  const { message, sends, deletions, timeouts, modLogs } = gamingMessage('free nitro https://discord-nitro-gift.example/claim', { mentionOwner: false });
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 1);
+  assert.equal(timeouts.length, 0);
+  assert.equal(sends.length, 1);
+  assert.match(sends[0].content, /suspicious\/invite links/i);
+  assert.equal(modLogs.length, 1);
+  assert.match(modLogs[0].content, /Scam\/link protection/i);
+});
+
+test('two staff or owner mentions in one message cause immediate five-minute timeout', async () => {
+  const { message, sends, deletions, timeouts, modLogs } = gamingMessage('<@123456789> <@123456789> stop ignoring me');
+  assert.equal(countStaffMentions(message), 2);
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 1);
+  assert.equal(timeouts.length, 1);
+  assert.equal(timeouts[0].length, 5 * 60 * 1000);
+  assert.equal(sends.length, 1);
+  assert.match(sends[0].content, /timed out for 5 minutes/i);
+  assert.equal(modLogs.length, 1);
+  assert.match(modLogs[0].content, /Mention-spam protection/i);
+});
+
+test('three separate staff-role tagging messages cause timeout on the third', async () => {
+  const { message, sends, deletions, timeouts, modLogs } = gamingMessage('<@&555555555> help', { mentionOwner: false, roleStaff: true });
+  assert.equal(countStaffMentions(message), 1);
+  assert.equal(await handleGamingMessage(message), false);
+  assert.equal(await handleGamingMessage(message), false);
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 1);
+  assert.equal(timeouts.length, 1);
+  assert.equal(timeouts[0].length, 5 * 60 * 1000);
+  assert.equal(sends.length, 1);
+  assert.equal(modLogs.length, 1);
+});
+
+test('single owner ping about real outage is exempt from mention-spam timeout', async () => {
+  const { message, deletions, timeouts } = gamingMessage('<@123456789> server is down');
+  assert.equal(await handleGamingMessage(message), true);
+  assert.equal(deletions.length, 0);
+  assert.equal(timeouts.length, 0);
 });
