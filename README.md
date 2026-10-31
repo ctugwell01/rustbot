@@ -160,3 +160,17 @@ npm run check
 
 The regression tests include real scam samples and normal chat messages to
 help prevent missed scams and accidental bans.
+
+
+## 5HeadNN's Arena Discord: FAQ and moderation
+
+The gaming guild uses the rules in gaming-moderation.js through the existing SheepSync bot (discord.js). Unlike the EvilSheep Discord, these channel answers are deterministic and do not need an Anthropic key.
+
+- Short natural-language questions about suggestions, bugs, tickets, rules, gamemode changes, announcements, server status and leaving Rust gamemodes get helpful responses. Channel links use the guild's existing visible channels; a missing/private channel is not invented. Replies are rate limited.
+- Non-owner/non-administrator Discord invite links (discord.gg, discord.com/invite, discordapp.com/invite), fake Nitro/Steam links and common URL shorteners are removed and logged. This also applies to users with a moderator role but no Administrator permission.
+- Any non-owner/non-administrator who types @everyone or @here has the message removed and receives a five-minute Discord timeout if the bot has permission. The server owner and members with the actual Administrator permission are exempt; a moderator role or Manage Messages alone is not an exemption. Actions are logged without triggering further mentions.
+- Existing ticket redirections, owner-ping protection, ban appeals and other rules are retained.
+
+In Discord server/role settings, disable "Mention @everyone, @here, and All Roles" for ordinary roles. Give SheepSync Manage Messages, Moderate Members, View Channel and Send Messages in relevant channels, and put its bot role above roles it may timeout. Discord won't let a bot timeout the server owner, administrators or members with an equal/higher role. Review audit entries in the existing moderation log channel.
+
+Test in the Arena Discord with a normal member account using a question such as "is there a suggestion tab" and a harmless @everyone attempt. Check the actual timeout, deletion and log channel; changing GitHub code alone does not grant Discord permissions.
