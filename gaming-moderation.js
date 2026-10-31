@@ -9,12 +9,81 @@ const PING_TIMEOUT_MS = 5 * 60 * 1000;
 const MENTION_SPAM_WINDOW_MS = 15 * 60 * 1000;
 const MENTION_SPAM_TIMEOUT_MS = 5 * 60 * 1000;
 const SERVER_ROAST_COOLDOWN_MS = 5 * 60 * 1000;
+const MASS_MENTION_TIMEOUT_MS = 5 * 60 * 1000;
+const ARENA_HELP_COOLDOWN_MS = 15 * 1000;
 const MOD_LOG_CHANNEL_ID = '1563588138738262036';
 const warnings = new Map();
 const mentionSpam = new Map();
 const serverRoastCooldowns = new Map();
+const arenaHelpCooldowns = new Map();
 const protectedNames = new Set(['owner', '5headnn']);
 const staffRoleNames = new Set(['admin', 'admins', 'administrator', 'administrators', 'mod', 'mods', 'mod.', 'moderator', 'moderators', 'staff']);
+
+
+function isOwnerOrAdministrator(message, member = message.member) {
+  return message.author.id === message.guild.ownerId ||
+    Boolean(member?.permissions?.has?.(PermissionFlagsBits.Administrator));
+}
+
+function hasMassMentionAttempt(content) {
+  // Catch literal attempts even when Discord permissions prevent the actual ping.
+  // Do not match email addresses or words such as @everyone123.
+  return /(^|[^\w@])@(everyone|here)\b/i.test(String(content || ''));
+}
+
+function findVisibleArenaChannel(message, names) {
+  const channel = message.guild?.channels?.cache?.find(ch =>
+    ch.isTextBased?.() && names.includes(ch.name?.toLowerCase())
+  );
+  if (!channel) return null;
+  if (channel.permissionsFor && message.member) {
+    try {
+      const permissions = channel.permissionsFor(message.member);
+      if (!permissions?.has?.(PermissionFlagsBits.ViewChannel)) return null;
+    } catch (_) { return null; }
+  }
+  return channel;
+}
+
+function getArenaHelpAnswer(message) {
+  const question = String(message.content || '').replace(/<@!?\d+>/g, '').trim();
+  // Don't reply to casual mentions of a feature or spam every chat message.
+  const asks = /\?|(?:^|\s)(?:is there|are there|where(?:'s| is| can)|how (?:do|can) i|how to|do (?:we|you) have|which channel|can (?:i|we) find|what(?:'s| is) the)\b/i.test(question);
+  if (!asks) return null;
+
+  if (/\b(?:how (?:do|can) i (?:leave|exit)|how to (?:leave|exit)|get back to (?:the )?lobby|return to (?:the )?lobby)\b/i.test(question)) {
+    return 'To leave a Rust gamemode, type /leave in game chat or press the Leave button in the gamemode menu.';
+  }
+
+  let names = null, purpose = null;
+  if (/\b(?:suggestions?|ideas?|feedback|feature requests?)\b/i.test(question)) {
+    names = ['suggestions', 'suggestion', 'feedback'];
+    purpose = 'share suggestions, new modes and feature ideas';
+  } else if (/\b(?:bug|bugs|glitches?|issue reports?)\b/i.test(question)) {
+    names = ['bugs', 'bug-reports', 'bug-report'];
+    purpose = 'report bugs and glitches';
+  } else if (/\b(?:tickets?|support|appeals?)\b/i.test(question)) {
+    names = ['tickets', 'ticket', 'support', 'support-ticket', 'support-tickets'];
+    purpose = 'open a ticket and contact staff';
+  } else if (/\b(?:rules?|guidelines?)\b/i.test(question)) {
+    names = ['rules', 'server-rules'];
+    purpose = 'read the server rules';
+  } else if (/\b(?:server status|player count|population|how many players|server online)\b/i.test(question)) {
+    names = ['server-status'];
+    purpose = 'check the server status and player count';
+  } else if (/\b(?:gamemode changes?|game ?mode changes?|mode rotation)\b/i.test(question)) {
+    names = ['gamemode-changes'];
+    purpose = 'discuss gamemode changes';
+  } else if (/\b(?:announcements?|server news|updates?)\b/i.test(question)) {
+    names = ['announcements'];
+    purpose = 'read official server announcements';
+  }
+  if (!names) return null;
+  const channel = findVisibleArenaChannel(message, names);
+  return channel
+    ? 'Yep! Head to <#' + channel.id + '> to ' + purpose + '.'
+    : "I couldn't find a visible channel for that right now. Please ask an admin for the right place.";
+}
 
 function normalise(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -126,8 +195,9 @@ function extractUrls(content) {
 
 function scamLinkReason(content) {
   const text = String(content || '');
-  const inviteMatches = text.match(/(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-z0-9-]+/gi) || [];
-  if (inviteMatches.length >= 2 || (inviteMatches.length === 1 && (text.trim().length < 120 || /\b(?:join|server|giveaway|free|nitro|check\s+out|come\s+join|dm\s+me)\b/i.test(text)))) {
+  // Any invite sent by a non-admin can advertise an unrelated server.
+  // Check both bare links and standard Discord invite URL spellings.
+  if (/(?:^|[\s(<])(?:https?:\/\/)?(?:www\.)?(?:discord\.gg\/|discord(?:app)?\.com\/invite\/)[a-z0-9-]+(?:[/?#][^\s<>]*)?/i.test(text)) {
     return 'Discord invite spam';
   }
 
@@ -279,6 +349,93 @@ async function handleGamingMessage(message) {
 
   const staffMember = isStaff(message);
 
+  // Only the guild owner and real Discord Administrators can mass mention.
+  // A moderator role or Manage Messages permission is not an exemption.
+  if (hasMassMentionAttempt(message.content)) {
+    let member = message.member;
+    if (!member && message.guild.members?.fetch) {
+      try { member = await message.guild.members.fetch(message.author.id); }
+      catch (error) { console.warn('Gaming Discord could not fetch member for mass-mention check:', error.message); }
+    }
+    if (message.author.id !== message.guild.ownerId && !member) {
+      console.warn('Gaming Discord mass-mention moderation skipped: cannot verify member permissions.');
+      return true; // Never risk timing out an administrator if member data is missing.
+    }
+    if (!isOwnerOrAdministrator(message, member)) {
+      const originalContent = message.content;
+      let deleted = false;
+      let timedOut = false;
+      if (message.deletable) {
+        try {
+          await message.delete();
+          deleted = true;
+        } catch (error) {
+          console.error('Gaming Discord mass-mention delete failed:', error.message);
+        }
+      }
+      if (member?.moderatable) {
+        try {
+          await member.timeout(MASS_MENTION_TIMEOUT_MS, 'Unauthorised @everyone or @here attempt');
+          timedOut = true;
+        } catch (error) {
+          console.error('Gaming Discord mass-mention timeout failed:', error.message);
+        }
+      }
+      try {
+        await message.channel.send({
+          content: '🐑 <@' + message.author.id + '> only the owner and administrators can use mass mentions. ' +
+            (timedOut ? 'You have been timed out for 5 minutes.' : 'Your message was removed; staff have been notified.'),
+          allowedMentions: { parse: [] },
+        });
+      } catch (error) {
+        console.error('Gaming Discord mass-mention notice failed:', error.message);
+      }
+      await sendSecurityLog(message, {
+        title: 'Mass-mention protection',
+        originalContent,
+        reason: 'Non-admin attempted @everyone or @here',
+        action: (deleted ? 'Message deleted' : 'Delete unavailable') + '; ' +
+          (timedOut ? '5-minute timeout applied' : 'timeout unavailable') + '; no ban',
+      });
+      return true;
+    }
+  }
+
+  // Remove invite/scam links before other handling, including for moderators.
+  // Only the guild owner and Discord Administrators may post invites.
+const scamReason = !isOwnerOrAdministrator(message) ? scamLinkReason(message.content) : null;
+if (scamReason) {
+  const originalContent = message.content;
+  let deleted = false;
+  if (message.deletable) {
+    try {
+      await message.delete();
+      deleted = true;
+    } catch (error) {
+      console.error('Gaming Discord scam-link delete failed:', error.message);
+    }
+  }
+
+  try {
+    await message.channel.send({
+      content: `🐑 <@${message.author.id}> suspicious/invite links aren't allowed here. If you need staff to review a link, use ${ticketChannelLink(message.guild)}.`,
+      allowedMentions: { parse: [] },
+    });
+  } catch (error) {
+    console.error('Gaming Discord scam-link notice failed:', error.message);
+  }
+
+  await sendSecurityLog(message, {
+    title: 'Scam/link protection',
+    originalContent,
+    reason: scamReason,
+    target: ticketChannelLink(message.guild),
+    action: deleted ? 'Message deleted and logged; no ban' : 'Delete unavailable; event logged; no ban',
+  });
+  return true;
+}
+
+
   // Clear abuse first: two or more staff/owner mentions in one message, or
   // three separate tagging messages within 15 minutes, results in a 5-minute
   // timeout. Genuine server incidents with one owner ping are not counted.
@@ -332,38 +489,6 @@ async function handleGamingMessage(message) {
         });
         return true;
       }
-    }
-
-    const scamReason = scamLinkReason(message.content);
-    if (scamReason) {
-      const originalContent = message.content;
-      let deleted = false;
-      if (message.deletable) {
-        try {
-          await message.delete();
-          deleted = true;
-        } catch (error) {
-          console.error('Gaming Discord scam-link delete failed:', error.message);
-        }
-      }
-
-      try {
-        await message.channel.send({
-          content: `🐑 <@${message.author.id}> suspicious/invite links aren't allowed here. If you need staff to review a link, use ${ticketChannelLink(message.guild)}.`,
-          allowedMentions: { parse: [] },
-        });
-      } catch (error) {
-        console.error('Gaming Discord scam-link notice failed:', error.message);
-      }
-
-      await sendSecurityLog(message, {
-        title: 'Scam/link protection',
-        originalContent,
-        reason: scamReason,
-        target: ticketChannelLink(message.guild),
-        action: deleted ? 'Message deleted and logged; no ban' : 'Delete unavailable; event logged; no ban',
-      });
-      return true;
     }
 
     if (isPlayerReport(message.content)) {
@@ -470,6 +595,27 @@ async function handleGamingMessage(message) {
     return true;
   }
 
+  // Short, factual channel help, without needing a paid AI model.
+  // Owner-ping moderation must still run on messages tagging the owner.
+  if (!isProtectedPing(message)) {
+    const answer = getArenaHelpAnswer(message);
+    if (answer) {
+      const now = Date.now();
+      const last = arenaHelpCooldowns.get(message.author.id) || 0;
+      if (now - last < ARENA_HELP_COOLDOWN_MS) return true;
+      arenaHelpCooldowns.set(message.author.id, now);
+      try {
+        await message.reply({
+          content: '🐑 ' + answer,
+          allowedMentions: { parse: [], repliedUser: false },
+        });
+      } catch (error) {
+        console.error('Gaming Discord FAQ reply failed:', error.message);
+      }
+      return true;
+    }
+  }
+
   if (!isProtectedPing(message)) return false;
   console.log(`🐑 Gaming Discord protected owner ping detected in ${GAMING_GUILD_ID}`);
   if (isStaff(message) || isSeriousServerIssue(message.content)) return true;
@@ -548,6 +694,9 @@ module.exports = {
   isBanAppeal,
   isPlayerReport,
   scamLinkReason,
+  hasMassMentionAttempt,
+  isOwnerOrAdministrator,
+  getArenaHelpAnswer,
   countStaffMentions,
   isServerTrashTalk,
   serverRoastReply,
