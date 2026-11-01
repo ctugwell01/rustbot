@@ -6,6 +6,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { GAMING_GUILD_ID, handleGamingMessage } = require('./gaming-moderation');
+const { handleArenaChat } = require('./arena-chat');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const CONFIG = {
@@ -318,7 +319,9 @@ client.on('guildMemberAdd', async (member) => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (message.guildId === GAMING_GUILD_ID) {
-    await handleGamingMessage(message);
+    // Security and channel FAQ handling always take priority over AI chat.
+    const moderatedOrAnswered = await handleGamingMessage(message);
+    if (!moderatedOrAnswered) await handleArenaChat(message, client.user?.id);
     return;
   }
   if (message.guildId !== CONFIG.guildId) return;
