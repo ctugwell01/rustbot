@@ -193,6 +193,28 @@ function extractUrls(content) {
   return String(content || '').match(/https?:\/\/[^\s<>()]+/gi) || [];
 }
 
+// General public-chat link policy is separate from phishing detection:
+// normal Steam/community URLs are still links, even when the domain is safe.
+function containsExternalLink(content) {
+  const text = String(content || '');
+  return /(?:^|[^\w@])(?:https?:\/\/|www\.)[^\s<>]+/i.test(text) ||
+    /(?:^|[^\w@])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(?=$|[/:?#\s<>)\],.!])/i.test(text);
+}
+
+function isPrivateSupportTicket(message) {
+  const channel = message.channel;
+  if (!channel || !/^(?:ticket|support)[-_]/i.test(String(channel.name || ''))) return false;
+  const everyoneRole = message.guild?.roles?.everyone;
+  if (!everyoneRole || typeof channel.permissionsFor !== 'function') return false;
+  try {
+    const permissions = channel.permissionsFor(everyoneRole);
+    // A channel that everyone can read isn't private, whatever its name.
+    return Boolean(permissions && !permissions.has(PermissionFlagsBits.ViewChannel));
+  } catch (_) {
+    return false;
+  }
+}
+
 function scamLinkReason(content) {
   const text = String(content || '');
   // Any invite sent by a non-admin can advertise an unrelated server.
@@ -435,6 +457,39 @@ if (scamReason) {
   return true;
 }
 
+
+  // Keep public chat free of ordinary external links, not just scams.
+  // Steam profiles and evidence links are still allowed in genuinely private
+  // ticket/support channels, but invites and suspected phishing were caught above.
+  if (!isOwnerOrAdministrator(message) && containsExternalLink(message.content) && !isPrivateSupportTicket(message)) {
+    const originalContent = message.content;
+    let deleted = false;
+    if (message.deletable) {
+      try {
+        await message.delete();
+        deleted = true;
+      } catch (error) {
+        console.error('Gaming Discord external-link delete failed:', error.message);
+      }
+    }
+    try {
+      await message.channel.send({
+        content: '🐑 <@' + message.author.id + '> external links are not allowed in public chat. ' +
+          'For reports or evidence, open a private ticket via ' + ticketChannelLink(message.guild) + '.',
+        allowedMentions: { parse: [] },
+      });
+    } catch (error) {
+      console.error('Gaming Discord external-link notice failed:', error.message);
+    }
+    await sendSecurityLog(message, {
+      title: 'Public link protection',
+      originalContent,
+      reason: 'External URL posted by non-admin in public chat',
+      target: ticketChannelLink(message.guild),
+      action: deleted ? 'Message deleted; no timeout or ban' : 'Delete unavailable; no timeout or ban',
+    });
+    return true;
+  }
 
   // Clear abuse first: two or more staff/owner mentions in one message, or
   // three separate tagging messages within 15 minutes, results in a 5-minute
@@ -694,6 +749,8 @@ module.exports = {
   isBanAppeal,
   isPlayerReport,
   scamLinkReason,
+  containsExternalLink,
+  isPrivateSupportTicket,
   hasMassMentionAttempt,
   isOwnerOrAdministrator,
   getArenaHelpAnswer,
