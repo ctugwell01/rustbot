@@ -189,3 +189,20 @@ Besides the ordinary link rules, it automatically:
 - Allows ordinary players to post legitimate Steam evidence in verified private ticket channels; dangerous attachments and Discord invitations remain blocked.
 
 All actions are logged. The bot **never automatically permanently bans users**. The bot cannot see member DMs, scan the contents of images/QR codes, inspect files, or guarantee all scams are caught. Keep Discord's built-in AutoMod, verification, onboarding/rules screening and staff-reporting channels enabled. Grant SheepSync Manage Messages, Timeout Members and appropriate role hierarchy. Test with a normal member account and review false positives in the moderation log.
+
+
+## Chat with SheepSync in 5HeadNN's Arena Discord
+
+Arena uses the existing Groq key from the Railway rustbot service (GROQ_API_KEY), the same key used by the Kick chatbot. No new bot account, plugin, or Anthropic key is needed.
+
+Talk to SheepSync in Arena Discord in any of these ways:
+- Mention the bot: @SheepSync how do I get better at Rust?
+- Type a direct address: SheepSync, how's it going?
+- Use a command: !ask what's the best way to practise recoil? (also !ai and !chat)
+- Reply to a message SheepSync sent to continue that conversation.
+
+The bot responds only to explicit prompts, not every message. Its existing Arena moderation, scam removal, ban appeals and channel FAQs are handled **before** AI chat. It will not answer content the moderation rules deleted or redirected. The main EvilSheep Discord retains its existing behaviour.
+
+This is a friendly conversational assistant, not a Discord administrator or a substitute for staff. It cannot change server permissions, jail players, or inspect game/Discord server state. It shouldn't invent official rules, population figures or staff decisions. Questions and up to six recent dialogue messages per member and channel are sent to Groq for a response. Conversations are stored in memory and reset on a bot restart. Messages do not include private DMs. A per-user eight-second cooldown, 700-character input limit, and a small concurrent-request limit help prevent API abuse. Replies disable Discord mentions.
+
+If replies fail: confirm the Railway rustbot service has GROQ_API_KEY configured, the Groq API works, and the bot has View Channel/Send Messages/Read Message History and Message Content Intent enabled. Check deploy logs for "Arena AI chat failed" (without posting secret tokens). Groq API usage may have provider limits or charges; monitor the existing provider account. 
