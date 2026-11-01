@@ -48,7 +48,7 @@ function detectScamContent(content, attachments) {
   }
 
   const crypto = /\b(?:crypto|bitcoin|btc|eth|investment|trading|forex)\b/i.test(text);
-  const guaranteed = /\b(?:guaranteed (?:profit|returns?|money)|double your (?:money|coins)|100% (?:profit|returns?)|risk.free returns?)\b/i.test(text);
+  const guaranteed = /\b(?:guaranteed (?:crypto |bitcoin |investment )?(?:profit|returns?|money)|double your (?:money|coins)|100% (?:profit|returns?)|risk.free returns?)\b/i.test(text);
   if (crypto && guaranteed && /\b(?:dm|message|send|deposit|invest|join|claim)\b/i.test(text)) {
     return { reason: 'Guaranteed-return financial solicitation', severity: 'medium' };
   }
