@@ -78,8 +78,10 @@ function getHistory(key, now) {
 
 function cleanReply(text) {
   return String(text || '')
-    .replace(/<@&?\d+>/g, '@user')
+    .replace(/<@!?\d+>|<@&\d+>/g, '@user')
     .replace(/@(everyone|here)\b/gi, '@\u200b$1')
+    .replace(/\b(?:https?:\/\/|www\.)[^\s<>]+/gi, '[link omitted]')
+    .replace(/\b(?:discord\.gg|discord(?:app)?\.com\/invite)\/[^\s<>]+/gi, '[link omitted]')
     .trim()
     .slice(0, MAX_REPLY_LENGTH);
 }
