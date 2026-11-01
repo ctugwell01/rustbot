@@ -92,6 +92,14 @@ test('pings cannot be sent by an AI response', () => {
   assert.ok(!text.includes('<@&5678>'));
 });
 
+test('AI replies cannot repost external links or mention Discord users', () => {
+  const text = cleanReply('Visit https://fake-steam.example and discord.gg/bad123 <@!1234>');
+  assert.match(text, /link omitted/i);
+  assert.doesNotMatch(text, /https:\/\//i);
+  assert.doesNotMatch(text, /discord\.gg\//i);
+  assert.doesNotMatch(text, /<@/);
+});
+
 test('short help replies do not require an API call', async () => {
   const message = makeMessage('!ask');
   assert.equal(await handleArenaChat(message.message, BOT_ID, { apiKey: null, fetchImpl: () => { throw Error('should not call API'); } }), true);
@@ -101,7 +109,7 @@ test('short help replies do not require an API call', async () => {
 test('unconfigured and failed provider responses give a helpful fallback', async () => {
   const missing = makeMessage('!ask hello?');
   assert.equal(await handleArenaChat(missing.message, BOT_ID, { apiKey: '', fetchImpl: fakeGroq().handler }), true);
-  assert.match(missing.sent[0].content, /not configured/i);
+  assert.match(missing.sent[0].content, /isn't configured/i);
 
   const failed = makeMessage('!ask hello?');
   assert.equal(await handleArenaChat(failed.message, BOT_ID, {
