@@ -3,6 +3,7 @@
 // Dedicated moderation for the gaming Discord. The existing EvilSheep server
 // continues to use its original Discord handlers in discord.js.
 const { PermissionFlagsBits } = require('discord.js');
+const { detectScamContent, recordBlockedPost, defangEvidence } = require('./arena-scam-defense');
 const GAMING_GUILD_ID = '1540790437508546700';
 const WARNING_WINDOW_MS = 15 * 60 * 1000;
 const PING_TIMEOUT_MS = 5 * 60 * 1000;
@@ -16,6 +17,10 @@ const warnings = new Map();
 const mentionSpam = new Map();
 const serverRoastCooldowns = new Map();
 const arenaHelpCooldowns = new Map();
+const scamNoticeCooldowns = new Map();
+const SCAM_NOTICE_COOLDOWN_MS = 2 * 60 * 1000;
+const REPEATED_LINK_TIMEOUT_MS = 5 * 60 * 1000;
+const HIGH_CONFIDENCE_SCAM_TIMEOUT_MS = 10 * 60 * 1000;
 const protectedNames = new Set(['owner', '5headnn']);
 const staffRoleNames = new Set(['admin', 'admins', 'administrator', 'administrators', 'mod', 'mods', 'mod.', 'moderator', 'moderators', 'staff']);
 
@@ -193,6 +198,28 @@ function extractUrls(content) {
   return String(content || '').match(/https?:\/\/[^\s<>()]+/gi) || [];
 }
 
+// General public-chat link policy is separate from phishing detection:
+// normal Steam/community URLs are still links, even when the domain is safe.
+function containsExternalLink(content) {
+  const text = String(content || '');
+  return /(?:^|[^\w@])(?:https?:\/\/|www\.)[^\s<>]+/i.test(text) ||
+    /(?:^|[^\w@])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(?=$|[/:?#\s<>)\],.!])/i.test(text);
+}
+
+function isPrivateSupportTicket(message) {
+  const channel = message.channel;
+  if (!channel || !/^(?:ticket|support)[-_]/i.test(String(channel.name || ''))) return false;
+  const everyoneRole = message.guild?.roles?.everyone;
+  if (!everyoneRole || typeof channel.permissionsFor !== 'function') return false;
+  try {
+    const permissions = channel.permissionsFor(everyoneRole);
+    // A channel that everyone can read isn't private, whatever its name.
+    return Boolean(permissions && !permissions.has(PermissionFlagsBits.ViewChannel));
+  } catch (_) {
+    return false;
+  }
+}
+
 function scamLinkReason(content) {
   const text = String(content || '');
   // Any invite sent by a non-admin can advertise an unrelated server.
@@ -324,7 +351,7 @@ async function sendSecurityLog(message, details) {
   const modLogChannel = message.guild.channels.cache.get(MOD_LOG_CHANNEL_ID);
   if (!modLogChannel?.isTextBased?.()) return;
 
-  const original = String(details.originalContent || message.content || '').replace(/\s+/g, ' ').trim().slice(0, 500) || '(empty message)';
+  const original = defangEvidence(details.originalContent || message.content);
   const sourceChannel = message.channel?.id ? `<#${message.channel.id}>` : 'unknown channel';
 
   try {
@@ -342,6 +369,70 @@ async function sendSecurityLog(message, details) {
   } catch (error) {
     console.error('Gaming Discord security log send failed:', error.message);
   }
+}
+
+
+async function removeAndLogArenaThreat(message, details) {
+  const originalContent = message.content;
+  let deleted = false;
+  let timedOut = false;
+  let actionLabel = 'no timeout or ban';
+  const offense = recordBlockedPost(message.guildId, message.author.id);
+  // Avoid punishing harmless first-time external URL posts. Strong text scams
+  // and dangerous file types get a timeout, repeated bad links also escalate.
+  const timeoutMs = details.highConfidence
+    ? HIGH_CONFIDENCE_SCAM_TIMEOUT_MS
+    : offense.repeated ? REPEATED_LINK_TIMEOUT_MS : 0;
+
+  if (message.deletable) {
+    try {
+      await message.delete();
+      deleted = true;
+    } catch (error) {
+      console.error('Gaming Discord threat delete failed:', error.message);
+    }
+  }
+
+  if (timeoutMs && message.member?.moderatable) {
+    try {
+      await message.member.timeout(timeoutMs, details.reason);
+      timedOut = true;
+      actionLabel = (timeoutMs / 60000) + '-minute timeout applied; no ban';
+    } catch (error) {
+      console.error('Gaming Discord threat timeout failed:', error.message);
+      actionLabel = 'timeout failed; no ban';
+    }
+  } else if (timeoutMs) {
+    actionLabel = 'timeout unavailable; no ban';
+  }
+
+  const key = message.guildId + ':' + message.author.id;
+  const now = Date.now();
+  const lastNotice = scamNoticeCooldowns.get(key) || 0;
+  // One notice per member per cooldown, except when escalating to a timeout.
+  if (now - lastNotice > SCAM_NOTICE_COOLDOWN_MS || timedOut) {
+    scamNoticeCooldowns.set(key, now);
+    try {
+      await message.channel.send({
+        content: '🐑 <@' + message.author.id + '> ' + details.notice +
+          (timedOut ? ' You have been timed out for ' + (timeoutMs / 60000) + ' minutes.' : ''),
+        allowedMentions: { parse: [] },
+      });
+    } catch (error) {
+      console.error('Gaming Discord security notice failed:', error.message);
+    }
+  }
+
+  await sendSecurityLog(message, {
+    title: details.title,
+    originalContent,
+    reason: details.reason,
+    target: ticketChannelLink(message.guild),
+    action: (deleted ? 'Message deleted' : 'Delete unavailable') + '; ' +
+      (timedOut || timeoutMs ? actionLabel : 'no timeout or ban') +
+      '; blocked posts in 10 minutes: ' + offense.count,
+  });
+  return true;
 }
 
 async function handleGamingMessage(message) {
@@ -403,38 +494,47 @@ async function handleGamingMessage(message) {
 
   // Remove invite/scam links before other handling, including for moderators.
   // Only the guild owner and Discord Administrators may post invites.
-const scamReason = !isOwnerOrAdministrator(message) ? scamLinkReason(message.content) : null;
-if (scamReason) {
-  const originalContent = message.content;
-  let deleted = false;
-  if (message.deletable) {
-    try {
-      await message.delete();
-      deleted = true;
-    } catch (error) {
-      console.error('Gaming Discord scam-link delete failed:', error.message);
-    }
-  }
+  const isAdmin = isOwnerOrAdministrator(message);
+  const privateTicket = isPrivateSupportTicket(message);
+  const scamReason = !isAdmin ? scamLinkReason(message.content) : null;
+  const threat = !isAdmin ? detectScamContent(message.content, message.attachments) : null;
 
-  try {
-    await message.channel.send({
-      content: `🐑 <@${message.author.id}> suspicious/invite links aren't allowed here. If you need staff to review a link, use ${ticketChannelLink(message.guild)}.`,
-      allowedMentions: { parse: [] },
+  if (scamReason) {
+    // Existing link detections are removed immediately, but a first fake link
+    // gets no automatic timeout: users sometimes share it to warn others.
+    return removeAndLogArenaThreat(message, {
+      title: 'Scam/link protection',
+      reason: scamReason,
+      highConfidence: false,
+      notice: 'suspicious/invite links are not allowed here. Use ' +
+        ticketChannelLink(message.guild) + ' if you need to report one.',
     });
-  } catch (error) {
-    console.error('Gaming Discord scam-link notice failed:', error.message);
   }
 
-  await sendSecurityLog(message, {
-    title: 'Scam/link protection',
-    originalContent,
-    reason: scamReason,
-    target: ticketChannelLink(message.guild),
-    action: deleted ? 'Message deleted and logged; no ban' : 'Delete unavailable; event logged; no ban',
-  });
-  return true;
-}
+  // Private staff tickets can contain quoted scam evidence. Do not penalise
+  // such text in tickets, but still remove executable/dangerous files.
+  const dangerousAttachment = Boolean(threat?.reason?.startsWith('Potentially dangerous file'));
+  if (threat && (!privateTicket || dangerousAttachment)) {
+    return removeAndLogArenaThreat(message, {
+      title: 'Scam/phishing protection',
+      reason: threat.reason,
+      highConfidence: !privateTicket && threat.severity === 'high',
+      notice: 'this looks like a scam or unsafe file. Do not share passwords, security codes or run unknown files.',
+    });
+  }
 
+  // Keep public chat free of ordinary external links, not just scams.
+  // Steam profiles and evidence links are still allowed in genuinely private
+  // ticket/support channels, but invites and suspected phishing were caught above.
+  if (!isAdmin && containsExternalLink(message.content) && !privateTicket) {
+    return removeAndLogArenaThreat(message, {
+      title: 'Public link protection',
+      reason: 'External URL posted by non-admin in public chat',
+      highConfidence: false,
+      notice: 'external links are not allowed in public chat. ' +
+        'For reports or evidence, open a private ticket via ' + ticketChannelLink(message.guild) + '.',
+    });
+  }
 
   // Clear abuse first: two or more staff/owner mentions in one message, or
   // three separate tagging messages within 15 minutes, results in a 5-minute
@@ -694,6 +794,8 @@ module.exports = {
   isBanAppeal,
   isPlayerReport,
   scamLinkReason,
+  containsExternalLink,
+  isPrivateSupportTicket,
   hasMassMentionAttempt,
   isOwnerOrAdministrator,
   getArenaHelpAnswer,

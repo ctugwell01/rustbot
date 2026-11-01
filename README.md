@@ -168,9 +168,24 @@ The gaming guild uses the rules in gaming-moderation.js through the existing She
 
 - Short natural-language questions about suggestions, bugs, tickets, rules, gamemode changes, announcements, server status and leaving Rust gamemodes get helpful responses. Channel links use the guild's existing visible channels; a missing/private channel is not invented. Replies are rate limited.
 - Non-owner/non-administrator Discord invite links (discord.gg, discord.com/invite, discordapp.com/invite), fake Nitro/Steam links and common URL shorteners are removed and logged. This also applies to users with a moderator role but no Administrator permission.
+- Non-owner/non-administrator members also cannot post ordinary external links in public Arena chat, including genuine Steam Community profile links. Such posts are deleted and logged without timeouts or bans. Genuine Steam profile and evidence links are allowed in private ticket/support channels (named ticket-* or support-*) **only when the @everyone role cannot view the channel**. Suspicious links and Discord invites remain prohibited there. The owner and actual Administrators are exempt.
 - Any non-owner/non-administrator who types @everyone or @here has the message removed and receives a five-minute Discord timeout if the bot has permission. The server owner and members with the actual Administrator permission are exempt; a moderator role or Manage Messages alone is not an exemption. Actions are logged without triggering further mentions.
 - Existing ticket redirections, owner-ping protection, ban appeals and other rules are retained.
 
 In Discord server/role settings, disable "Mention @everyone, @here, and All Roles" for ordinary roles. Give SheepSync Manage Messages, Moderate Members, View Channel and Send Messages in relevant channels, and put its bot role above roles it may timeout. Discord won't let a bot timeout the server owner, administrators or members with an equal/higher role. Review audit entries in the existing moderation log channel.
 
 Test in the Arena Discord with a normal member account using a question such as "is there a suggestion tab" and a harmless @everyone attempt. Check the actual timeout, deletion and log channel; changing GitHub code alone does not grant Discord permissions.
+
+## Automatic Arena scam handling
+
+SheepSync now watches **5HeadNN's Arena Discord** messages, but never reads users' private DMs.
+Besides the ordinary link rules, it automatically:
+
+- Removes Discord invites and known phishing/URL-shortener patterns for non-admins.
+- Removes unsolicited credential requests, verification QR-code instructions, fake gift/prize promotions, guaranteed-return solicitations, and dangerous executable/script attachments.
+- Issues a 10-minute timeout for high-confidence credential theft, verification QR-code prompts and dangerous executables **in public chat**, if Discord allows moderation of that member. Lower-confidence giveaways are deleted and logged without immediate timeout.
+- Counts blocked links/scam posts per user. Three within ten minutes trigger a 5-minute timeout. This counter is reset when Railway restarts.
+- Defangs quoted URLs and mass mentions in staff moderation logs so scam links are not reposted as clickable bait.
+- Allows ordinary players to post legitimate Steam evidence in verified private ticket channels; dangerous attachments and Discord invitations remain blocked.
+
+All actions are logged. The bot **never automatically permanently bans users**. The bot cannot see member DMs, scan the contents of images/QR codes, inspect files, or guarantee all scams are caught. Keep Discord's built-in AutoMod, verification, onboarding/rules screening and staff-reporting channels enabled. Grant SheepSync Manage Messages, Timeout Members and appropriate role hierarchy. Test with a normal member account and review false positives in the moderation log.
