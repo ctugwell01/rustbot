@@ -518,7 +518,7 @@ async function handleGamingMessage(message) {
     return removeAndLogArenaThreat(message, {
       title: 'Scam/phishing protection',
       reason: threat.reason,
-      highConfidence: !privateTicket,
+      highConfidence: !privateTicket && threat.severity === 'high',
       notice: 'this looks like a scam or unsafe file. Do not share passwords, security codes or run unknown files.',
     });
   }
