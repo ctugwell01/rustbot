@@ -24,6 +24,11 @@ function detectScamContent(content, attachments) {
     }
   }
 
+  // Allow members to warn staff in public that someone sent a scam.
+  // Malicious attachments remain blocked because they were checked above.
+  const reporting = /^\s*(?:warning\s*[:!-]|beware\b|scam\s+(?:alert|report)\b|phishing\s+(?:alert|report)\b|is this a scam\b|someone (?:sent|asked|told) me\b|i (?:got|received) (?:a )?(?:scam|suspicious) (?:dm|message)\b|(?:do not|don't|never)\s+(?:dm|send|share|give|scan|click)\b)/i;
+  if (reporting.test(text)) return null;
+
   const credentials = /\b(?:passwords?|passcodes?|two.factor|2fa|mfa|otp|one.time (?:password|code)|login codes?|verification codes?|recovery codes?|backup codes?|steam guard codes?)\b/i;
   const solicitCodes = /\b(?:dm|send|share|give|provide|message|forward)\s+(?:me|us|staff|support)\b/i;
   const reversed = /\b(?:dm|send|share|give|provide|message|forward)\s+me\s+(?:your|the)\s+(?:steam guard|discord|steam|account)\s+(?:code|password|recovery|2fa)\b/i;
@@ -39,13 +44,13 @@ function detectScamContent(content, attachments) {
   const fakeGift = /\b(?:free\s+(?:discord\s+)?nitro|free\s+(?:steam\s+)?skins?|steam\s+(?:wallet|gift\s+card)|giveaway|gift\s+card|prize|reward)\b/i.test(text);
   const solicit = /\b(?:dm\s+(?:me|us)|message\s+(?:me|us)|click\s+(?:here|now)|claim\s+(?:your|now|it)|verify\s+(?:your|to)|login\s+to|sign\s+in\s+to|scan\s+(?:the|this)\s+qr)\b/i.test(text);
   if (fakeGift && solicit) {
-    return { reason: 'Prize/giveaway promotion requesting account action', severity: 'high' };
+    return { reason: 'Prize/giveaway promotion requesting account action', severity: 'medium' };
   }
 
   const crypto = /\b(?:crypto|bitcoin|btc|eth|investment|trading|forex)\b/i.test(text);
   const guaranteed = /\b(?:guaranteed (?:profit|returns?|money)|double your (?:money|coins)|100% (?:profit|returns?)|risk.free returns?)\b/i.test(text);
   if (crypto && guaranteed && /\b(?:dm|message|send|deposit|invest|join|claim)\b/i.test(text)) {
-    return { reason: 'Guaranteed-return financial solicitation', severity: 'high' };
+    return { reason: 'Guaranteed-return financial solicitation', severity: 'medium' };
   }
 
   return null;
