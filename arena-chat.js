@@ -141,6 +141,10 @@ async function handleArenaChat(message, botId, options = {}) {
   }
 
   if (activeQuestions.has(key)) return true;
+  if (activeQuestions.size >= MAX_CONCURRENT) {
+    await send('🐑 A few people are chatting with me right now. Try again shortly.');
+    return true;
+  }
   const last = recentQuestions.get(key);
   if (last !== undefined && now - last < COOLDOWN_MS) {
     await send('🐑 Give me a few seconds between questions, mate.');
@@ -154,6 +158,12 @@ async function handleArenaChat(message, botId, options = {}) {
     return true;
   }
 
+  // Bound conversation/cache size to avoid unbounded state in the long-lived bot.
+  for (const [id, entry] of conversations) {
+    if (now - entry.updatedAt > HISTORY_TTL_MS) conversations.delete(id);
+  }
+  if (conversations.size > 1000) conversations.delete(conversations.keys().next().value);
+  if (recentQuestions.size > 2000) recentQuestions.clear();
   recentQuestions.set(key, now);
   activeQuestions.add(key);
   try {
