@@ -69,3 +69,30 @@ test('does not moderate ordinary chat, quotes of viewer stats, or Discord discus
 test('normalizes case and invisible characters in direct contact solicitations', () => {
   assert.equal(scoreMessages(['ADD ME UP ON D\u200bISCORD']).isSpam, true);
 });
+
+
+test('automatically flags Rust account-selling spam from the screenshot', () => {
+  const pitches = [
+    'Temporary Rust account for 0.60 USD, available only via Discord: gg/alpkensi- Permanently Banned',
+    'TEMPORARY RUST ACCOUNT 0.60 USD available only via DISCORD gg/alpkensi',
+    'Selling Rust accounts for £1 — permanently banned',
+  ];
+  for (const message of pitches) {
+    const result = scoreMessages([message]);
+    assert.equal(result.isSpam, true, message);
+    assert.match(result.reason, /Rust account sale advertisement/);
+  }
+});
+
+test('Rust account sale filter ignores normal discussions about game bans and Discord', () => {
+  const innocent = [
+    'My Rust account got permanently banned',
+    'Are temporary Rust bans common?',
+    'I paid 0.60 USD for a skin',
+    'Join our Rust Discord for base tips',
+    'Can I appeal a permanently banned Rust account?',
+  ];
+  for (const message of innocent) {
+    assert.equal(scoreMessages([message]).isSpam, false, message);
+  }
+});
