@@ -19,6 +19,13 @@ function normalize(message) {
 
 function getSignals(message) {
   const text = normalize(message);
+  // Rust account-sale spam: require an account offer and a transactional/contact
+  // detail so normal conversations about bans or Discord are not penalized.
+  const rustAccountSale = /\\b(?:temporary\\s+)?rust\\s+accounts?\\b/.test(text) &&
+    /\\b(?:temporary|for\\s+sale|selling|available|usd|gbp|banned)\\b/.test(text) &&
+    (/(?:[$£€]\\s*\\d|\\b\\d+(?:[.,]\\d+)?\\s*(?:usd|gbp|dollars?|pounds?)\\b)/.test(text) ||
+      /\\b(?:available\\s+only\\s+via|order\\s+(?:via|on)|buy\\s+(?:via|on))\\s+discord\\b/.test(text) ||
+      /\\b(?:discord\\.gg\\/|gg\\/)[a-z0-9_-]+/.test(text));
   const offer = /\b(?:i|we)\s+(?:can|could|will|would|wanna|want to|would love to|am able to|can help)\b.{0,50}\b(?:share|promote|advertise|feature|market|boost|grow)\b.{0,65}\b(?:your|ur)\s+(?:stream|channel|broadcast)\b/.test(text);
   const strongPromotion = offer && /\b(?:promote|advertise|feature|market|boost|grow)\b/.test(text);
   const community = /\b(?:kick|streamer|streaming|creator|gaming|discord|support)\s+(?:(?:large|big|private|active|online)\s+)?(?:community|group|network|server|hub)\b/.test(text);
@@ -31,7 +38,7 @@ function getSignals(message) {
   const directContact = /\b(?:add|dm|message|contact|hit|reach|find|ping)\s+(?:me|us)\s+(?:(?:up|back)\s+)?(?:(?:on|via|at|through)\s+)?(?:my\s+)?(?:discord|telegram|whatsapp|instagram|tg)\b/.test(text);
   const socialPlatform = /\b(?:discord|telegram|whatsapp|instagram|tg)\b/.test(text);
   const askToChat = /\b(?:let's|lets)\s+(?:chat|connect|talk)\b|\b(?:dm|message|contact)\s+me\b/.test(text);
-  return { offer, strongPromotion, community, growth, targets, earnings, directContact, socialPlatform, askToChat };
+  return { rustAccountSale, offer, strongPromotion, community, growth, targets, earnings, directContact, socialPlatform, askToChat };
 }
 
 function scoreMessages(messages) {
@@ -40,6 +47,7 @@ function scoreMessages(messages) {
   const targets = new Set(signals.flatMap(s => [...s.targets]));
   let score = 0;
   const reasons = [];
+  if (has('rustAccountSale')) { score += 4; reasons.push('Rust account sale advertisement'); }
   if (has('offer')) { score += 3; reasons.push('offering stream promotion'); }
   if (has('offer') && has('strongPromotion')) score += 1;
   if (has('offer') && has('community')) { score += 2; reasons.push('community placement pitch'); }
