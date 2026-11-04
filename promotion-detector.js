@@ -19,13 +19,12 @@ function normalize(message) {
 
 function getSignals(message) {
   const text = normalize(message);
-  // Rust account-sale spam: require an account offer and a transactional/contact
-  // detail so normal conversations about bans or Discord are not penalized.
-  const rustAccountSale = /\\b(?:temporary\\s+)?rust\\s+accounts?\\b/.test(text) &&
-    /\\b(?:temporary|for\\s+sale|selling|available|usd|gbp|banned)\\b/.test(text) &&
-    (/(?:[$£€]\\s*\\d|\\b\\d+(?:[.,]\\d+)?\\s*(?:usd|gbp|dollars?|pounds?)\\b)/.test(text) ||
-      /\\b(?:available\\s+only\\s+via|order\\s+(?:via|on)|buy\\s+(?:via|on))\\s+discord\\b/.test(text) ||
-      /\\b(?:discord\\.gg\\/|gg\\/)[a-z0-9_-]+/.test(text));
+  // Flag clear Rust account sale pitches, not ordinary Rust/Discord discussion.
+  const rustAccountSale = /\b(?:temporary\s+)?rust\s+accounts?\b/.test(text) &&
+    /\b(?:temporary|for\s+sale|selling|available|usd|gbp|banned)\b/.test(text) &&
+    (/(?:[$£€]\s*\d|\b\d+(?:[.,]\d+)?\s*(?:usd|gbp|dollars?|pounds?)\b)/.test(text) ||
+      /\b(?:available\s+only\s+via|order\s+(?:via|on)|buy\s+(?:via|on))\s+discord\b/.test(text) ||
+      /\b(?:discord[.]gg|gg)\/[a-z0-9_-]+/.test(text));
   const offer = /\b(?:i|we)\s+(?:can|could|will|would|wanna|want to|would love to|am able to|can help)\b.{0,50}\b(?:share|promote|advertise|feature|market|boost|grow)\b.{0,65}\b(?:your|ur)\s+(?:stream|channel|broadcast)\b/.test(text);
   const strongPromotion = offer && /\b(?:promote|advertise|feature|market|boost|grow)\b/.test(text);
   const community = /\b(?:kick|streamer|streaming|creator|gaming|discord|support)\s+(?:(?:large|big|private|active|online)\s+)?(?:community|group|network|server|hub)\b/.test(text);
